@@ -4,3 +4,4 @@ dist/
 *.local
 .vercel
 .scratch/sonder/research/epk-tmp/
+.pool/

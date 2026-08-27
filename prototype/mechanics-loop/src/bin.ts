@@ -1,12 +1,8 @@
 /**
- * The pool for one sitting.
- *
- * Drop 1-2s opted-in .mp4 files in public/bin/{delay,residue,keeping,justdone}/
- * and redeploy. The build picks them up. Do not invent a Line for a clip that
- * has no real person behind it.
+ * Optional seed clips only. Live takes never go in the repo. OK on a take
+ * writes it to this phone and uploads it into the shared pool for that ask.
  *
  * Optional `line` keyed by src, for a clip shown alone or last in a montage.
- * `gradient` is filled from filename order (dark/still first if you sort that way).
  */
 
 import { FILES } from 'virtual:onkery-bin'

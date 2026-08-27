@@ -53,6 +53,12 @@ video.replay {
   transform: translateY(-40%);
 }
 
+.copy-caption {
+  top: auto;
+  bottom: 22%;
+  transform: none;
+}
+
 .prompt,
 .line {
   font-size: 1.35rem;
@@ -271,7 +277,13 @@ button {
 }
 
 .montage-line {
-  animation: montage-line 900ms ease-out both;
+  margin: 0;
+  font-size: 1.2rem;
+  letter-spacing: 0.03em;
+}
+
+.montage-line.cut {
+  animation: montage-line 700ms ease-out both;
 }
 
 @keyframes montage-line {

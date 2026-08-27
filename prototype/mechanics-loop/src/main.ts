@@ -5,6 +5,7 @@ import { RefreshCcw, type IconNode } from 'lucide'
 import { poolFor, type PoolClip } from './bin'
 import { buildMontage } from './montage'
 import { CODA_ASK, getSitting, GRANT, WELCOME } from './opener'
+import { saveTake, takesFor } from './store'
 import {
   filmAsk,
   frameLine,
@@ -31,6 +32,7 @@ let recorder: MediaRecorder | null = null
 let chunks: Blob[] = []
 let takeUrl: string | null = null
 let lastTake: string | null = null
+let lastSavedId: string | null = null
 let stopTimer: number | null = null
 let cutTimer: number | null = null
 let sketches: { destroy(): void }[] = []
@@ -84,9 +86,9 @@ function leaveRecord(action: Action) {
   if (action.type === 'keep' && takeUrl) {
     if (lastTake && lastTake !== takeUrl) URL.revokeObjectURL(lastTake)
     lastTake = takeUrl
-    const poolId = step.name === 'coda' ? CODA_ASK.pool : filmAsk(step.place, step.i).pool
-    void uploadTake(poolId, takeUrl)
     takeUrl = null
+    const poolId = step.name === 'coda' ? CODA_ASK.pool : filmAsk(step.place, step.i).pool
+    void persistTake(poolId, lastTake)
   }
   if (action.type === 'skip') {
     if (lastTake) URL.revokeObjectURL(lastTake)
@@ -99,37 +101,93 @@ function leaveRecord(action: Action) {
 function resetSitting() {
   if (lastTake) URL.revokeObjectURL(lastTake)
   lastTake = null
+  lastSavedId = null
   revokeTake()
 }
 
-async function uploadTake(pool: string, url: string) {
-  try {
-    const blob = await fetch(url).then((r) => r.blob())
-    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm'
-    const file = new File([blob], `take.${ext}`, { type: blob.type || 'video/webm' })
-    await upload(`pool/${pool}/take.${ext}`, file, {
-      access: 'public',
-      handleUploadUrl: '/api/upload',
-      clientPayload: JSON.stringify({ pool }),
-    })
-  } catch {
-    /* local vite has no /api */
+function clipsFrom(src: string[]): PoolClip[] {
+  return src.map((item, i, all) => ({
+    src: item,
+    gradient: all.length <= 1 ? 0.5 : i / (all.length - 1),
+  }))
+}
+
+function uniqueClips(clips: PoolClip[]): PoolClip[] {
+  const seen = new Set<string>()
+  const out: PoolClip[] = []
+  for (const clip of clips) {
+    if (seen.has(clip.src)) continue
+    seen.add(clip.src)
+    out.push(clip)
   }
+  return out
+}
+
+function urlsFrom(data: unknown): string[] {
+  if (typeof data !== 'object' || data === null || !('urls' in data)) return []
+  const urls = data.urls
+  if (!Array.isArray(urls)) return []
+  return urls.filter((u): u is string => typeof u === 'string')
+}
+
+async function persistTake(pool: string, url: string) {
+  let blob: Blob
+  try {
+    blob = await fetch(url).then((r) => r.blob())
+  } catch {
+    return
+  }
+  try {
+    lastSavedId = await saveTake(pool, blob)
+  } catch {
+    /* private mode */
+  }
+  if (import.meta.env.DEV) {
+    try {
+      await fetch(`/api/dev-pool?pool=${encodeURIComponent(pool)}`, {
+        method: 'POST',
+        headers: { 'content-type': blob.type || 'video/webm' },
+        body: blob,
+      })
+    } catch {
+      /* vite middleware missing */
+    }
+    return
+  }
+  try {
+    await uploadTake(pool, blob)
+  } catch {
+    /* no /api */
+  }
+}
+
+async function uploadTake(pool: string, blob: Blob) {
+  const ext = blob.type.includes('mp4') ? 'mp4' : 'webm'
+  const file = new File([blob], `take.${ext}`, { type: blob.type || 'video/webm' })
+  await upload(`pool/${pool}/take.${ext}`, file, {
+    access: 'public',
+    handleUploadUrl: '/api/upload',
+    clientPayload: JSON.stringify({ pool }),
+  })
 }
 
 async function fetchPool(id: string): Promise<PoolClip[]> {
   const seed = poolFor(id)
+  let local: PoolClip[] = []
+  try {
+    const takes = await takesFor(id)
+    local = clipsFrom(takes.filter((t) => t.id !== lastSavedId).map((t) => t.url))
+  } catch {
+    /* private mode */
+  }
   try {
     const res = await fetch(`/api/pool?id=${encodeURIComponent(id)}`)
-    if (!res.ok) return seed
-    const { urls } = (await res.json()) as { urls?: string[] }
-    const live = (urls ?? []).map((src, i, all) => ({
-      src,
-      gradient: all.length <= 1 ? 0.5 : i / (all.length - 1),
-    }))
-    return [...seed, ...live]
+    if (!res.ok) return uniqueClips([...seed, ...local])
+    const live = clipsFrom(urlsFrom(await res.json()))
+    if (live.length) return uniqueClips([...seed, ...live])
+    return uniqueClips([...seed, ...local])
   } catch {
-    return seed
+    return uniqueClips([...seed, ...local])
   }
 }
 
@@ -414,11 +472,17 @@ function render() {
       <video class="replay montage-v on" playsinline muted></video>
       <video class="replay montage-v" playsinline muted></video>
       <div class="tap-layer tap-next">
-        <div class="copy copy-mid"><p class="line montage-line">${esc(ask.caption)}</p></div>
+        <div class="copy copy-caption"><p class="line montage-line">${esc(ask.caption)}</p></div>
       </div>`)
     const vids = [...app.querySelectorAll<HTMLVideoElement>('video.montage-v')]
     const caption = app.querySelector<HTMLParagraphElement>('.montage-line')!
-    caption.textContent = ask.caption
+
+    const pulseCaption = () => {
+      caption.textContent = ask.caption
+      caption.classList.remove('cut')
+      void caption.offsetWidth
+      caption.classList.add('cut')
+    }
 
     const playCuts = (cuts: ReturnType<typeof buildMontage>) => {
       if (!cuts.length || !vids[0].isConnected) {
@@ -432,7 +496,7 @@ function render() {
         el.muted = true
         void el.play()
         vids.forEach((v) => v.classList.toggle('on', v === el))
-        caption.textContent = ask.caption
+        pulseCaption()
         const next = cuts[(i + 1) % cuts.length]
         const ahead = vids[(i + 1) % 2]
         if (ahead !== el) {

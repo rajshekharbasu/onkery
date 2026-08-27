@@ -8,6 +8,7 @@ import type { PoolClip } from './bin'
 export type Cut = { src: string; ms: number; mine: boolean }
 
 const TAIL = 2
+const OTHER_MIN = 3
 const CAP = 12
 
 function cutMs(i: number, n: number): number {
@@ -29,11 +30,12 @@ function shuffle<T>(xs: T[]): T[] {
 }
 
 /**
- * At least three other people when the pool has them. Own takes splice
- * unmarked into the fast stretch.
+ * Take at least three other people when the pool has them, cap at 12.
+ * Own takes splice unmarked into the fast stretch.
  */
 export function buildMontage(pool: PoolClip[], mine: string[]): Cut[] {
-  const others = shuffle(pool).slice(0, Math.min(CAP, pool.length))
+  const n = pool.length >= OTHER_MIN ? Math.min(CAP, pool.length) : pool.length
+  const others = shuffle(pool).slice(0, n)
   const cuts: Cut[] = others.map((c) => ({ src: c.src, mine: false, ms: 0 }))
   const body = Math.max(cuts.length - TAIL, 0)
   mine.forEach((src, k) => {

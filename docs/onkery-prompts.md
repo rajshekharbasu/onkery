@@ -148,4 +148,4 @@ That's it.
 
 ## Montage
 
-Procedural. Clips in the relation bin, sorted dark/still to bright/moving. Own takes spliced unmarked into the fast stretch. Cuts start around a second, accelerate, then two slower tail cuts. Then it loops from the top until they tap.
+Procedural. Clips in that ask's pool, at least three other people when the pool has them. Own takes spliced unmarked into the fast stretch. Caption on every cut. Cuts start around a second, accelerate, then two slower tail cuts. Then it loops from the top until they tap.
