@@ -1,9 +1,10 @@
+import { upload } from '@vercel/blob/client'
 import { drawablyButton } from 'drawably'
 import 'drawably/style.css'
 import { RefreshCcw, type IconNode } from 'lucide'
 import { poolFor, type PoolClip } from './bin'
 import { buildMontage } from './montage'
-import { getSitting, GRANT, WELCOME } from './opener'
+import { CODA_ASK, getSitting, GRANT, WELCOME } from './opener'
 import {
   filmAsk,
   frameLine,
@@ -29,11 +30,10 @@ let stream: MediaStream | null = null
 let recorder: MediaRecorder | null = null
 let chunks: Blob[] = []
 let takeUrl: string | null = null
-let takes: string[] = []
+let lastTake: string | null = null
 let stopTimer: number | null = null
 let cutTimer: number | null = null
 let sketches: { destroy(): void }[] = []
-let met: Record<string, PoolClip> = {}
 
 function dispatch(action: Action) {
   step = reduce(step, action)
@@ -76,32 +76,61 @@ function revokeTake() {
   }
 }
 
-/** Kept takes join the montage unmarked, so the participant goes by as one of the many. */
+/** Kept take joins the pool, and this sitting's montage. */
 function leaveRecord(action: Action) {
   if (recorder) recorder.onstop = () => {}
   stopRecording()
   recorder = null
   if (action.type === 'keep' && takeUrl) {
-    takes.push(takeUrl)
+    if (lastTake && lastTake !== takeUrl) URL.revokeObjectURL(lastTake)
+    lastTake = takeUrl
+    const poolId = step.name === 'coda' ? CODA_ASK.pool : filmAsk(step.place, step.i).pool
+    void uploadTake(poolId, takeUrl)
     takeUrl = null
+  }
+  if (action.type === 'skip') {
+    if (lastTake) URL.revokeObjectURL(lastTake)
+    lastTake = null
   }
   revokeTake()
   dispatch(action)
 }
 
 function resetSitting() {
-  takes.forEach((url) => URL.revokeObjectURL(url))
-  takes = []
-  met = {}
+  if (lastTake) URL.revokeObjectURL(lastTake)
+  lastTake = null
   revokeTake()
 }
 
-/** One stranger per bin, held for the sitting so a re-render doesn't swap who you met. */
-function meetClip(bin: string): PoolClip | null {
-  const pool = poolFor(bin)
-  if (!pool.length) return null
-  if (!met[bin]) met[bin] = pool[Math.floor(Math.random() * pool.length)]
-  return met[bin]
+async function uploadTake(pool: string, url: string) {
+  try {
+    const blob = await fetch(url).then((r) => r.blob())
+    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm'
+    const file = new File([blob], `take.${ext}`, { type: blob.type || 'video/webm' })
+    await upload(`pool/${pool}/take.${ext}`, file, {
+      access: 'public',
+      handleUploadUrl: '/api/upload',
+      clientPayload: JSON.stringify({ pool }),
+    })
+  } catch {
+    /* local vite has no /api */
+  }
+}
+
+async function fetchPool(id: string): Promise<PoolClip[]> {
+  const seed = poolFor(id)
+  try {
+    const res = await fetch(`/api/pool?id=${encodeURIComponent(id)}`)
+    if (!res.ok) return seed
+    const { urls } = (await res.json()) as { urls?: string[] }
+    const live = (urls ?? []).map((src, i, all) => ({
+      src,
+      gradient: all.length <= 1 ? 0.5 : i / (all.length - 1),
+    }))
+    return [...seed, ...live]
+  } catch {
+    return seed
+  }
 }
 
 async function ensureCamera(): Promise<boolean> {
@@ -133,19 +162,6 @@ function bindOpenerClip(el: HTMLVideoElement) {
     bindLive(el)
     return
   }
-  el.srcObject = null
-  el.src = src
-  el.muted = true
-  el.loop = true
-  el.playsInline = true
-  el.onerror = () => {
-    el.removeAttribute('src')
-    bindLive(el)
-  }
-  void el.play()
-}
-
-function bindPoolClip(el: HTMLVideoElement, src: string) {
   el.srcObject = null
   el.src = src
   el.muted = true
@@ -225,8 +241,8 @@ function stateDump(): string {
   }
   lines.push(`opener: ${sit.opener.id}`)
   if (step.name === 'montage') {
-    const pool = poolFor(step.bin).length
-    lines.push(`cuts: ${pool + takes.length} (${pool} pool, ${takes.length} yours)`)
+    const ask = step.coda ? CODA_ASK : filmAsk(step.place, step.i)
+    lines.push(`pool: ${ask.pool}`)
   }
   return lines.join('\n')
 }
@@ -392,59 +408,45 @@ function render() {
     return
   }
 
-  if (step.name === 'meet') {
-    const ask = filmAsk(step.place, step.i)
-    const clip = meetClip(ask.bin as string)
-    if (!clip) {
-      dispatch({ type: 'next' })
-      return
-    }
-    const line = clip.line ? `<p class="line">${esc(clip.line)}</p>` : ''
-    app.innerHTML = shell(`
-      <video class="replay" playsinline loop muted></video>
-      <div class="tap-layer tap-next">
-        <div class="copy copy-mid">
-          <p class="was">${esc(ask.ask)}</p>
-          ${line}
-        </div>
-      </div>`)
-    bindPoolClip(app.querySelector<HTMLVideoElement>('video.replay')!, clip.src)
-    app.querySelector('.tap-next')!.addEventListener('click', () => dispatch({ type: 'next' }))
-    return
-  }
-
   if (step.name === 'montage') {
-    const cuts = buildMontage(poolFor(step.bin), takes)
-    if (!cuts.length) {
-      dispatch({ type: 'next' })
-      return
-    }
+    const ask = step.coda ? CODA_ASK : filmAsk(step.place, step.i)
     app.innerHTML = shell(`
       <video class="replay montage-v on" playsinline muted></video>
       <video class="replay montage-v" playsinline muted></video>
       <div class="tap-layer tap-next">
-        <div class="copy copy-mid"><p class="line montage-line"></p></div>
+        <div class="copy copy-mid"><p class="line montage-line">${esc(ask.caption)}</p></div>
       </div>`)
     const vids = [...app.querySelectorAll<HTMLVideoElement>('video.montage-v')]
     const caption = app.querySelector<HTMLParagraphElement>('.montage-line')!
+    caption.textContent = ask.caption
 
-    const play = (i: number) => {
-      const el = vids[i % 2]
-      el.src = cuts[i].src
-      el.muted = true
-      void el.play()
-      vids.forEach((v) => v.classList.toggle('on', v === el))
-      if (cuts[i].line) caption.textContent = cuts[i].line as string
-      else caption.textContent = ''
-      const next = cuts[(i + 1) % cuts.length]
-      const ahead = vids[(i + 1) % 2]
-      if (ahead !== el) {
-        ahead.src = next.src
-        ahead.load()
+    const playCuts = (cuts: ReturnType<typeof buildMontage>) => {
+      if (!cuts.length || !vids[0].isConnected) {
+        dispatch({ type: 'next' })
+        return
       }
-      cutTimer = window.setTimeout(() => play((i + 1) % cuts.length), cuts[i].ms)
+      const play = (i: number) => {
+        if (!vids[0].isConnected) return
+        const el = vids[i % 2]
+        el.src = cuts[i].src
+        el.muted = true
+        void el.play()
+        vids.forEach((v) => v.classList.toggle('on', v === el))
+        caption.textContent = ask.caption
+        const next = cuts[(i + 1) % cuts.length]
+        const ahead = vids[(i + 1) % 2]
+        if (ahead !== el) {
+          ahead.src = next.src
+          ahead.load()
+        }
+        cutTimer = window.setTimeout(() => play((i + 1) % cuts.length), cuts[i].ms)
+      }
+      play(0)
     }
-    play(0)
+
+    void fetchPool(ask.pool).then((pool) => {
+      playCuts(buildMontage(pool, lastTake ? [lastTake] : []))
+    })
 
     app.querySelector('.tap-next')!.addEventListener('click', () => {
       stopCuts()

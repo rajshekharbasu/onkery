@@ -3,16 +3,7 @@
  * many at once, then a slow Opener, then one last film?
  */
 
-import { MONTAGE_FROM_OWN_TAKES, poolFor } from './bin'
-import {
-  FRAME,
-  HOLD,
-  LAST_ASK,
-  dealSitting,
-  getSitting,
-  type FilmAsk,
-  type Place,
-} from './opener'
+import { FRAME, HOLD, LAST_ASK, dealSitting, getSitting, type FilmAsk, type Place } from './opener'
 
 export type { Place }
 export type OpenerBeat = 0 | 1
@@ -28,8 +19,7 @@ export type Step =
   | { name: 'recording'; place: Place; i: number }
   | { name: 'review'; place: Place; i: number }
   | { name: 'between'; place: Place; i: number; text: string }
-  | { name: 'meet'; place: Place; i: number }
-  | { name: 'montage'; place: Place; i: number; bin: string }
+  | { name: 'montage'; place: Place; i: number; coda?: boolean }
   | { name: 'frame'; place: Place; i: number }
   | { name: 'opener'; place: Place; beat: OpenerBeat }
   | { name: 'hold'; place: Place; i: number }
@@ -91,33 +81,15 @@ function advanceHunt(place: Place, i: number): Step {
   return { name: 'frame', place, i: 0 }
 }
 
-function hasMeet(ask: FilmAsk): boolean {
-  return poolFor(ask.bin).length > 0
-}
-
-function hasMontage(ask: FilmAsk): boolean {
-  if (!ask.montage) return false
-  return poolFor(ask.montage).length > 0 || MONTAGE_FROM_OWN_TAKES
+function postAsk(place: Place, i: number, stage: PostStage, _skipped = false): Step {
+  if (stage !== 'montage') return { name: 'montage', place, i }
+  return advanceHunt(place, i)
 }
 
 /**
- * Beats owed after an ask resolves: the teach line, then the one stranger who
- * got the same ask, then the many. Skipping the film loses only the teach line.
- * The strangers still arrive.
+ * After an ask resolves, the next screen is the montage for that ask.
  */
 type PostStage = 'ask' | 'between' | 'meet' | 'montage'
-
-function postAsk(place: Place, i: number, stage: PostStage, skipped = false): Step {
-  const ask = filmAsk(place, i)
-  if (stage === 'ask' && !skipped && ask.after) return { name: 'between', place, i, text: ask.after }
-  if ((stage === 'ask' || stage === 'between') && hasMeet(ask)) {
-    return { name: 'meet', place, i }
-  }
-  if (stage !== 'montage' && hasMontage(ask)) {
-    return { name: 'montage', place, i, bin: ask.montage as string }
-  }
-  return advanceHunt(place, i)
-}
 
 function afterHunt(place: Place, i: number, skipped: boolean): Step {
   return postAsk(place, i, 'ask', skipped)
@@ -161,11 +133,9 @@ export function reduce(state: Step, action: Action): Step {
     case 'between':
       if (action.type === 'next') return postAsk(state.place, state.i, 'between')
       return state
-    case 'meet':
-      if (action.type !== 'next' && action.type !== 'seen') return state
-      return postAsk(state.place, state.i, 'meet')
     case 'montage':
       if (action.type !== 'next' && action.type !== 'seen') return state
+      if (state.coda) return { name: 'leave', place: state.place }
       return postAsk(state.place, state.i, 'montage')
     case 'frame':
       if (action.type !== 'next') return state
@@ -190,9 +160,8 @@ export function reduce(state: Step, action: Action): Step {
         if (action.type === 'skip') return { name: 'leave', place: state.place }
         return state
       }
-      if (action.type === 'keep' || action.type === 'skip') {
-        return { name: 'leave', place: state.place }
-      }
+      if (action.type === 'keep') return { name: 'montage', place: state.place, i: 0, coda: true }
+      if (action.type === 'skip') return { name: 'leave', place: state.place }
       if (action.type === 'redo') return { ...state, phase: 'ready' }
       return state
     case 'leave':

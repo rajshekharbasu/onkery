@@ -5,10 +5,10 @@
 
 import type { PoolClip } from './bin'
 
-export type Cut = { src: string; ms: number; line?: string; mine: boolean }
+export type Cut = { src: string; ms: number; mine: boolean }
 
-/** Cuts held back from the acceleration so the montage can land instead of stop. */
 const TAIL = 2
+const CAP = 12
 
 function cutMs(i: number, n: number): number {
   const body = Math.max(n - TAIL, 1)
@@ -19,25 +19,26 @@ function cutMs(i: number, n: number): number {
   return i === body ? 900 : 2000
 }
 
+function shuffle<T>(xs: T[]): T[] {
+  const a = [...xs]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
 /**
- * Strangers ordered along the gradient. The participant's own takes splice
- * unmarked into the fast stretch, late enough to jolt, never in the tail.
- * The tail belongs to whoever carries the Line.
+ * At least three other people when the pool has them. Own takes splice
+ * unmarked into the fast stretch.
  */
 export function buildMontage(pool: PoolClip[], mine: string[]): Cut[] {
-  const cuts: Cut[] = [...pool]
-    .sort((a, b) => a.gradient - b.gradient)
-    .map((c) => ({ src: c.src, line: c.line, mine: false, ms: 0 }))
-
+  const others = shuffle(pool).slice(0, Math.min(CAP, pool.length))
+  const cuts: Cut[] = others.map((c) => ({ src: c.src, mine: false, ms: 0 }))
   const body = Math.max(cuts.length - TAIL, 0)
   mine.forEach((src, k) => {
     const at = Math.min(Math.round(body * (0.62 + k * 0.14)), body)
     cuts.splice(at + k, 0, { src, mine: true, ms: 0 })
   })
-
-  return cuts.map((c, i, all) => ({
-    ...c,
-    ms: cutMs(i, all.length),
-    line: i === all.length - 1 ? c.line : undefined,
-  }))
+  return cuts.map((c, i, all) => ({ ...c, ms: cutMs(i, all.length) }))
 }

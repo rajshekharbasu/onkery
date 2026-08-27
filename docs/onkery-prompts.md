@@ -6,23 +6,21 @@ No typing. The participant answers by filming.
 
 ## Sitting
 
-A sitting is dealt when they pick inside or outside. Two asks from different relations, not the ones from last time. The opener matches the second ask's relation.
+A sitting is dealt when they pick inside or outside. Two asks from different relations, not the ones from last time. The opener matches the second ask's relation. Kept clips upload into a pool for that ask. Other sittings draw from it.
 
 1. Welcome
 2. Camera grant
 3. Inside or outside
-4. Camera lesson: *Show me anything.*
-5. Ask A
-6. Ask B. After this, a montage of Ask A's relation, looping until they tap. Their own takes are in it, unmarked.
+4. Camera lesson: *Show me anything.* Then a looping montage of that pool, caption *anything*.
+5. Ask A. Then a looping montage of that ask's pool, with its caption on every cut.
+6. Ask B. Same.
 7. Frame: *Someone else was asked this too.*
 8. Opener. They were asked the same relation. Plant clip only if that opener has a file. Otherwise the live camera stands in. No invented Line.
 9. *Your turn.*
-10. *Show me yours.*
+10. *Show me yours.* Then a montage of that pool, caption *yours*.
 11. *That's it.* Tap to sit again (skips welcome, keeps the camera).
 
-A stranger who got the same ask can answer after A or B, once that relation's bin has real clips. Until then those beats stay off.
-
-Skip on a film-ask skips the teach line only. Strangers still arrive if the bin has clips. The opener and *Show me yours* can be skipped at the shutter.
+A montage wants at least three other people when the pool has them, and loops until they tap. Your own take is in it unmarked. Do not put clips in the repo. OK on a take sends it to the pool.
 
 ## Welcome and grant
 
