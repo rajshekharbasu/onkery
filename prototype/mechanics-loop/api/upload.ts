@@ -1,6 +1,6 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
-
-const POOL = /^[a-z0-9-]+$/
+import { catalogAdd } from '../lib/catalog'
+import { isPoolId, poolFromJson } from '../lib/pool-id'
 
 export async function POST(request: Request): Promise<Response> {
   const body = (await request.json()) as HandleUploadBody
@@ -9,9 +9,8 @@ export async function POST(request: Request): Promise<Response> {
       body,
       request,
       onBeforeGenerateToken: async (_pathname, clientPayload) => {
-        const parsed = clientPayload ? (JSON.parse(clientPayload) as { pool?: string }) : {}
-        const pool = parsed.pool ?? ''
-        if (!POOL.test(pool)) throw new Error('unknown pool')
+        const pool = poolFromJson(clientPayload)
+        if (!pool) throw new Error('unknown pool')
         return {
           allowedContentTypes: ['video/webm', 'video/mp4', 'video/quicktime'],
           addRandomSuffix: true,
@@ -19,10 +18,16 @@ export async function POST(request: Request): Promise<Response> {
           tokenPayload: JSON.stringify({ pool }),
         }
       },
-      onUploadCompleted: async () => {},
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        const pool = poolFromJson(tokenPayload)
+        if (!isPoolId(pool)) throw new Error('unknown pool')
+        await catalogAdd({ pool, url: blob.url, uploadedAt: Date.now() })
+      },
     })
     return Response.json(json)
   } catch (err) {
-    return Response.json({ error: (err as Error).message }, { status: 400 })
+    const message = err instanceof Error ? err.message : 'upload failed'
+    console.error('upload failed', { message })
+    return Response.json({ error: message }, { status: 400 })
   }
 }

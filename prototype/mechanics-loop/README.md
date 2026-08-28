@@ -24,6 +24,8 @@ The ring is keeping → delay → residue → justdone. A short pool widens into
 
 OK on a take stores it on the phone and uploads it into that ask's pool. Later sittings, including other people, draw from there. Do not drop user videos in the repo.
 
+On a Vercel deploy, the file lives in Blob. A Redis catalog remembers `{pool, url, uploadedAt}` so a montage samples 12 instead of listing the store. A daily cron keeps the newest 24 per pool and deletes the rest. Local `npm run prototype` still uses `.pool/` on disk.
+
 Until a pool has three other people, the montage widens into a neighbor on the ring, with the ask's caption on every cut.
 
 `src/loop.ts` is the reducer. `src/opener.ts` is the flows. `src/montage.ts` is the cut curve. The rest is throwaway.

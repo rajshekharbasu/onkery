@@ -13,5 +13,11 @@
         }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/decay",
+      "schedule": "0 4 * * *"
+    }
   ]
 }

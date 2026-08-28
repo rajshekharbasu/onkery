@@ -3,13 +3,13 @@
  * scale, or as a shuffle?
  */
 
+import { SAMPLE } from '../lib/limits'
 import type { PoolClip } from './bin'
 
 export type Cut = { src: string; ms: number; mine: boolean }
 
 export const TAIL = 2
 export const OTHER_MIN = 3
-const CAP = 12
 
 function cutMs(i: number, n: number): number {
   const body = Math.max(n - TAIL, 1)
@@ -34,7 +34,7 @@ function shuffle<T>(xs: T[]): T[] {
  * Own takes splice unmarked into the fast stretch.
  */
 export function buildMontage(pool: PoolClip[], mine: string[]): Cut[] {
-  const n = pool.length >= OTHER_MIN ? Math.min(CAP, pool.length) : pool.length
+  const n = pool.length >= OTHER_MIN ? Math.min(SAMPLE, pool.length) : pool.length
   const others = shuffle(pool).slice(0, n)
   const cuts: Cut[] = others.map((c) => ({ src: c.src, mine: false, ms: 0 }))
   const body = Math.max(cuts.length - TAIL, 0)
