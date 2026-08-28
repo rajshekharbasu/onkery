@@ -1,4 +1,5 @@
 import { upload } from '@vercel/blob/client'
+import { inject } from '@vercel/analytics'
 import { drawablyButton } from 'drawably'
 import 'drawably/style.css'
 import { RefreshCcw, type IconNode } from 'lucide'
@@ -20,6 +21,9 @@ import {
   type Action,
   type Step,
 } from './loop'
+
+// Initialize Vercel Web Analytics
+inject()
 
 const app = document.querySelector<HTMLDivElement>('#app')
 if (!app) throw new Error('#app missing')
