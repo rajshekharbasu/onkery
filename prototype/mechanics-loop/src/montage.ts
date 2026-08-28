@@ -7,8 +7,8 @@ import type { PoolClip } from './bin'
 
 export type Cut = { src: string; ms: number; mine: boolean }
 
-const TAIL = 2
-const OTHER_MIN = 3
+export const TAIL = 2
+export const OTHER_MIN = 3
 const CAP = 12
 
 function cutMs(i: number, n: number): number {

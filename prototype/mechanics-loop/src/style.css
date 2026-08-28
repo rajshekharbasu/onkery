@@ -53,6 +53,59 @@ video.replay {
   transform: translateY(-40%);
 }
 
+.copy-home,
+.copy-brief {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  transform: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(18vh + env(safe-area-inset-top)) 1.75rem calc(2.4rem + env(safe-area-inset-bottom));
+}
+
+.copy-home {
+  justify-content: space-between;
+}
+
+.copy-brief {
+  justify-content: flex-end;
+  gap: 1.6rem;
+}
+
+.copy-home .title {
+  margin: 0;
+}
+
+.copy-home .lead {
+  margin: 0;
+  max-width: 16rem;
+  font-size: 1.2rem;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+}
+
+.copy-home .choice,
+.copy-brief .choice {
+  margin: 0;
+}
+
+.copy-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  max-width: 22rem;
+}
+
+.copy-stack .prompt {
+  margin: 0;
+  font-size: 1.12rem;
+  line-height: 1.45;
+}
+
 .copy-caption {
   top: auto;
   bottom: 22%;

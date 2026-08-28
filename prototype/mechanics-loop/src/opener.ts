@@ -1,14 +1,18 @@
 /**
- * Slot for the curated-real Opener, plus the film-ask deck.
- * Replace an opener's src with a real opted-in fragment when you have one.
+ * Named flows on the relation ring, plus the opener slot.
+ * Unused asks stay listed so the inventory is complete; they are not dealt.
  */
 
 export type Place = 'inside' | 'outside'
 
+export type Relation = 'keeping' | 'delay' | 'residue' | 'justdone'
+
+export type FlowId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
+
 export type FilmAsk = {
   id: string
   ask: string
-  relation: string
+  relation: Relation | 'teach' | 'coda'
   caption: string
   pool: string
   teach?: boolean
@@ -20,7 +24,7 @@ export type FilmAsk = {
 export type Opener = {
   id: string
   ask: string
-  relation: string
+  relation: Relation
   src?: string
   line?: string
 }
@@ -31,10 +35,20 @@ export const HOLD = ['Your turn.']
 
 export const LAST_ASK = 'Show me yours.'
 
+export const RING: Relation[] = ['keeping', 'delay', 'residue', 'justdone']
+
 export const WELCOME = {
   title: 'This is Onkery.',
-  body: 'You film small things from where you are. Other people who were asked the same thing show you theirs.',
-  trust: 'Your videos stay inside Onkery and join the pool other people see. They are not sold, not used to train anything, and not used for anything else. No audio.',
+  lead: 'You film small things from where you are.',
+  next: 'Continue',
+}
+
+export const BRIEF = {
+  lines: [
+    'You get directions to take a video.',
+    'Then you see how strangers answered.',
+    'No names. Your videos stay inside Onkery.',
+  ],
   next: 'Continue',
 }
 
@@ -43,6 +57,8 @@ export const GRANT = {
   hint: 'Nothing is recorded until you press the shutter.',
   allow: 'Allow camera',
 }
+
+export const RECORD_HINT = 'Tap the button to record a short video.'
 
 const TEACH: Record<Place, FilmAsk> = {
   inside: {
@@ -63,37 +79,125 @@ const TEACH: Record<Place, FilmAsk> = {
   },
 }
 
-/**
- * Relation, not object class. Delay, residue, keeping, just-done.
- * Constraint at the end so they do not tidy for the camera.
- */
-const DECK: Record<Place, FilmAsk[]> = {
-  inside: [
-    { id: 'in-delay-care', relation: 'delay', pool: 'in-delay-care', caption: 'meaning to', ask: 'Show me something you keep meaning to take care of. Do not touch it.' },
-    { id: 'in-delay-sit', relation: 'delay', pool: 'in-delay-sit', caption: 'sitting there', ask: 'Show me something that has been sitting there.' },
-    { id: 'in-delay-unfinished', relation: 'delay', pool: 'in-delay-unfinished', caption: 'unfinished', ask: 'Show me something unfinished.' },
-    { id: 'in-res-used', relation: 'residue', pool: 'in-res-used', caption: 'still out', ask: 'Show me the last thing you used and did not put away.' },
-    { id: 'in-res-mess', relation: 'residue', pool: 'in-res-mess', caption: 'a mess', ask: 'Show me a mess you made.' },
-    { id: 'in-res-out', relation: 'residue', pool: 'in-res-out', caption: 'still out', ask: 'Show me something that is still out from earlier.' },
-    { id: 'in-keep-near', relation: 'keeping', pool: 'in-keep-near', caption: 'nearby', ask: 'Show me something you keep nearby.' },
-    { id: 'in-keep-not', relation: 'keeping', pool: 'in-keep-not', caption: 'not yours', ask: 'Show me something here that is not yours.' },
-    { id: 'in-keep-sit', relation: 'keeping', pool: 'in-keep-sit', caption: 'next to you', ask: 'Show me what sits next to where you sit.' },
-    { id: 'in-just-doing', relation: 'justdone', pool: 'in-just-doing', caption: 'in the middle', ask: 'Show me what you were just doing. Do not set it up.' },
-    { id: 'in-just-hands', relation: 'justdone', pool: 'in-just-hands', caption: 'last touched', ask: 'Show me the last thing your hands were on.' },
-    { id: 'in-just-stood', relation: 'justdone', pool: 'in-just-stood', caption: 'where you were', ask: 'Show me where you were standing before this.' },
-  ],
-  outside: [
-    { id: 'out-delay-left', relation: 'delay', pool: 'out-delay-left', caption: 'left behind', ask: 'Show me something out here that has been left.' },
-    { id: 'out-delay-wait', relation: 'delay', pool: 'out-delay-wait', caption: 'waiting rn', ask: 'Show me something that looks like it is waiting.' },
-    { id: 'out-res-trash', relation: 'residue', pool: 'out-res-trash', caption: 'garbage', ask: 'Show me some garbage.' },
-    { id: 'out-res-someone', relation: 'residue', pool: 'out-res-someone', caption: 'someone left', ask: 'Show me something someone left.' },
-    { id: 'out-keep-not', relation: 'keeping', pool: 'out-keep-not', caption: 'not yours', ask: 'Show me something out here that is not yours.' },
-    { id: 'out-keep-brought', relation: 'keeping', pool: 'out-keep-brought', caption: 'brought with', ask: 'Show me something you brought with you.' },
-    { id: 'out-just-weather', relation: 'justdone', pool: 'out-just-weather', caption: 'the weather', ask: 'Show me the weather you have been under.' },
-    { id: 'out-just-feet', relation: 'justdone', pool: 'out-just-feet', caption: 'underfoot', ask: "Show me what's under your feet." },
-    { id: 'out-just-moving', relation: 'justdone', pool: 'out-just-moving', caption: 'moving', ask: 'Show me something moving that is not you.' },
-    { id: 'out-just-before', relation: 'justdone', pool: 'out-just-before', caption: 'before you stopped', ask: 'Show me where you were before you stopped.' },
-  ],
+type RelAsk = FilmAsk & { relation: Relation }
+
+const ASK = {
+  'in-delay-care': {
+    id: 'in-delay-care',
+    relation: 'delay' as const,
+    pool: 'in-delay-care',
+    caption: 'meaning to',
+    ask: 'Show me something you keep meaning to take care of. Do not touch it.',
+  },
+  'in-res-used': {
+    id: 'in-res-used',
+    relation: 'residue' as const,
+    pool: 'in-res-used',
+    caption: 'still out',
+    ask: 'Show me the last thing you used and did not put away.',
+  },
+  'in-res-mess': {
+    id: 'in-res-mess',
+    relation: 'residue' as const,
+    pool: 'in-res-mess',
+    caption: 'a mess',
+    ask: 'Show me a mess you made.',
+  },
+  'in-keep-sit': {
+    id: 'in-keep-sit',
+    relation: 'keeping' as const,
+    pool: 'in-keep-sit',
+    caption: 'next to you',
+    ask: 'Show me what sits next to where you sit.',
+  },
+  'in-just-doing': {
+    id: 'in-just-doing',
+    relation: 'justdone' as const,
+    pool: 'in-just-doing',
+    caption: 'in the middle',
+    ask: 'Show me what you were just doing. Do not set it up.',
+  },
+  'out-delay-left': {
+    id: 'out-delay-left',
+    relation: 'delay' as const,
+    pool: 'out-delay-left',
+    caption: 'left behind',
+    ask: 'Show me something out here that has been left.',
+  },
+  'out-delay-wait': {
+    id: 'out-delay-wait',
+    relation: 'delay' as const,
+    pool: 'out-delay-wait',
+    caption: 'waiting rn',
+    ask: 'Show me something that looks like it is waiting.',
+  },
+  'out-res-someone': {
+    id: 'out-res-someone',
+    relation: 'residue' as const,
+    pool: 'out-res-someone',
+    caption: 'someone left',
+    ask: 'Show me something someone left.',
+  },
+  'out-keep-not': {
+    id: 'out-keep-not',
+    relation: 'keeping' as const,
+    pool: 'out-keep-not',
+    caption: 'not yours',
+    ask: 'Show me something out here that is not yours.',
+  },
+  'out-keep-brought': {
+    id: 'out-keep-brought',
+    relation: 'keeping' as const,
+    pool: 'out-keep-brought',
+    caption: 'brought with',
+    ask: 'Show me something you brought with you.',
+  },
+  'out-just-weather': {
+    id: 'out-just-weather',
+    relation: 'justdone' as const,
+    pool: 'out-just-weather',
+    caption: 'the weather',
+    ask: 'Show me the weather you have been under.',
+  },
+} satisfies Record<string, RelAsk>
+
+/** Listed in the prompts inventory. Not dealt. */
+export const UNUSED_ASKS: FilmAsk[] = [
+  { id: 'in-delay-sit', relation: 'delay', pool: 'in-delay-sit', caption: 'sitting there', ask: 'Show me something that has been sitting there.' },
+  { id: 'in-delay-unfinished', relation: 'delay', pool: 'in-delay-unfinished', caption: 'unfinished', ask: 'Show me something unfinished.' },
+  { id: 'in-res-out', relation: 'residue', pool: 'in-res-out', caption: 'still out', ask: 'Show me something that is still out from earlier.' },
+  { id: 'in-keep-near', relation: 'keeping', pool: 'in-keep-near', caption: 'nearby', ask: 'Show me something you keep nearby.' },
+  { id: 'in-keep-not', relation: 'keeping', pool: 'in-keep-not', caption: 'not yours', ask: 'Show me something here that is not yours.' },
+  { id: 'in-just-hands', relation: 'justdone', pool: 'in-just-hands', caption: 'last touched', ask: 'Show me the last thing your hands were on.' },
+  { id: 'in-just-stood', relation: 'justdone', pool: 'in-just-stood', caption: 'where you were', ask: 'Show me where you were standing before this.' },
+  { id: 'out-res-trash', relation: 'residue', pool: 'out-res-trash', caption: 'garbage', ask: 'Show me some garbage.' },
+  { id: 'out-just-feet', relation: 'justdone', pool: 'out-just-feet', caption: 'underfoot', ask: "Show me what's under your feet." },
+  { id: 'out-just-moving', relation: 'justdone', pool: 'out-just-moving', caption: 'moving', ask: 'Show me something moving that is not you.' },
+  { id: 'out-just-before', relation: 'justdone', pool: 'out-just-before', caption: 'before you stopped', ask: 'Show me where you were before you stopped.' },
+]
+
+const PLANT: Opener = {
+  id: 'op-delay-care',
+  relation: 'delay',
+  ask: ASK['in-delay-care'].ask,
+  src: '/opener.mp4',
+  line: "I'll get to it",
+}
+
+type Flow = {
+  id: FlowId
+  place: Place
+  a: RelAsk
+  b: RelAsk
+}
+
+const FLOWS: Record<FlowId, Flow> = {
+  A: { id: 'A', place: 'inside', a: ASK['in-keep-sit'], b: ASK['in-delay-care'] },
+  B: { id: 'B', place: 'inside', a: ASK['in-res-used'], b: ASK['in-delay-care'] },
+  C: { id: 'C', place: 'inside', a: ASK['in-res-mess'], b: ASK['in-just-doing'] },
+  D: { id: 'D', place: 'outside', a: ASK['out-just-weather'], b: ASK['out-keep-brought'] },
+  E: { id: 'E', place: 'outside', a: ASK['out-keep-not'], b: ASK['out-delay-left'] },
+  F: { id: 'F', place: 'outside', a: ASK['out-delay-wait'], b: ASK['out-res-someone'] },
 }
 
 export const CODA_ASK: FilmAsk = {
@@ -104,109 +208,67 @@ export const CODA_ASK: FilmAsk = {
   pool: 'yours',
 }
 
-/**
- * Drawn per sitting. Only the delay plant has a clip today. Other openers
- * fall back to the live camera and show the ask, not a made-up Line.
- */
-const OPENERS: Opener[] = [
-  { id: 'op-delay-care', relation: 'delay', ask: 'Show me something you keep meaning to take care of. Do not touch it.', src: '/opener.mp4' },
-  { id: 'op-delay-sit', relation: 'delay', ask: 'Show me something that has been sitting there.' },
-  { id: 'op-res-used', relation: 'residue', ask: 'Show me the last thing you used and did not put away.' },
-  { id: 'op-res-mess', relation: 'residue', ask: 'Show me a mess you made.' },
-  { id: 'op-keep-near', relation: 'keeping', ask: 'Show me something you keep nearby.' },
-  { id: 'op-keep-not', relation: 'keeping', ask: 'Show me something here that is not yours.' },
-  { id: 'op-just-doing', relation: 'justdone', ask: 'Show me what you were just doing. Do not set it up.' },
-  { id: 'op-just-hands', relation: 'justdone', ask: 'Show me the last thing your hands were on.' },
-]
-
 export type Sitting = {
-  asks: Record<Place, FilmAsk[]>
+  flow: FlowId
+  place: Place
+  asks: [FilmAsk, ...FilmAsk[]]
   opener: Opener
 }
-
-const RECENT_KEY = 'onkery-recent-asks'
 
 let sitting: Sitting = emptySitting()
 
 function emptySitting(): Sitting {
   return {
-    asks: {
-      inside: [TEACH.inside],
-      outside: [TEACH.outside],
-    },
-    opener: OPENERS[0],
+    flow: 'A',
+    place: 'inside',
+    asks: [withBin(TEACH.inside)],
+    opener: PLANT,
   }
 }
 
-function shuffle<T>(xs: T[]): T[] {
-  const a = [...xs]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
+function withBin(ask: FilmAsk): FilmAsk {
+  return { ...ask, bin: ask.pool, montage: ask.pool }
 }
 
-function recentIds(): string[] {
-  try {
-    const raw = sessionStorage.getItem(RECENT_KEY)
-    return raw ? (JSON.parse(raw) as string[]) : []
-  } catch {
-    return []
-  }
+function isRelation(rel: FilmAsk['relation']): rel is Relation {
+  return rel === 'keeping' || rel === 'delay' || rel === 'residue' || rel === 'justdone'
 }
 
-function remember(ids: string[]) {
-  try {
-    sessionStorage.setItem(RECENT_KEY, JSON.stringify(ids))
-  } catch {
-    /* private mode */
-  }
+function openerFor(flow: Flow): Opener {
+  if (flow.id === 'A' || flow.id === 'B') return PLANT
+  return { id: `op-${flow.b.id}`, relation: flow.b.relation, ask: flow.b.ask }
 }
 
-function pickAsks(place: Place, recent: string[]): FilmAsk[] {
-  const deck = DECK[place]
-  const fresh = deck.filter((a) => !recent.includes(a.id))
-  const source = fresh.length >= 2 ? fresh : deck
-  const picked: FilmAsk[] = []
-  for (const a of shuffle(source)) {
-    if (picked.some((p) => p.relation === a.relation)) continue
-    picked.push(a)
-    if (picked.length === 2) break
-  }
-  if (picked.length < 2) {
-    for (const a of shuffle(deck)) {
-      if (picked.some((p) => p.id === a.id)) continue
-      picked.push(a)
-      if (picked.length === 2) break
-    }
-  }
-  const a0 = { ...picked[0], bin: picked[0].pool, montage: picked[0].pool }
-  const a1 = { ...picked[1], bin: picked[1].pool, montage: picked[1].pool }
-  const teach = { ...TEACH[place], bin: TEACH[place].pool, montage: TEACH[place].pool }
-  return [teach, a0, a1]
-}
-
-function pickOpener(relation: string, recent: string[]): Opener {
-  const unused = OPENERS.filter((o) => !recent.includes(o.id))
-  const match = unused.filter((o) => o.relation === relation)
-  const pool = match.length ? match : unused.length ? unused : OPENERS
-  return shuffle(pool)[0]
-}
-
-export function dealSitting(place: Place): Sitting {
-  const recent = recentIds()
-  const asks = pickAsks(place, recent)
-  const opener = pickOpener(asks[2]?.relation ?? 'delay', recent)
+function dealFlow(id: FlowId, teach: boolean): Sitting {
+  const flow = FLOWS[id]
+  const asks: [FilmAsk, ...FilmAsk[]] = teach
+    ? [withBin(TEACH[flow.place]), withBin(flow.a), withBin(flow.b)]
+    : [withBin(flow.a), withBin(flow.b)]
   sitting = {
-    asks: {
-      inside: place === 'inside' ? asks : [TEACH.inside],
-      outside: place === 'outside' ? asks : [TEACH.outside],
-    },
-    opener,
+    flow: id,
+    place: flow.place,
+    asks,
+    opener: openerFor(flow),
   }
-  remember([asks[1].id, asks[2].id, opener.id])
   return sitting
+}
+
+export function dealTrioStart(place: Place): Sitting {
+  return dealFlow(place === 'inside' ? 'A' : 'D', true)
+}
+
+export function nextFlowId(id: FlowId): FlowId | undefined {
+  if (id === 'A') return 'B'
+  if (id === 'B') return 'C'
+  if (id === 'D') return 'E'
+  if (id === 'E') return 'F'
+  return undefined
+}
+
+export function dealNextInTrio(): Sitting | undefined {
+  const next = nextFlowId(sitting.flow)
+  if (!next) return undefined
+  return dealFlow(next, false)
 }
 
 export function getSitting(): Sitting {
@@ -215,4 +277,72 @@ export function getSitting(): Sitting {
 
 export function sittingOpener(): Opener {
   return sitting.opener
+}
+
+export function askB(): FilmAsk {
+  const filmed = sitting.asks.filter((a) => !a.teach)
+  return filmed[filmed.length - 1] ?? sitting.asks[0]
+}
+
+export function codaAsk(): FilmAsk {
+  const b = askB()
+  return {
+    ...CODA_ASK,
+    relation: isRelation(b.relation) ? b.relation : 'coda',
+    pool: b.pool,
+    bin: b.pool,
+    montage: b.pool,
+  }
+}
+
+const ADJACENT: Record<Place, Record<Relation, Relation[]>> = {
+  inside: {
+    keeping: ['delay'],
+    delay: ['keeping', 'residue'],
+    residue: ['delay', 'justdone'],
+    justdone: ['residue'],
+  },
+  outside: {
+    justdone: ['keeping'],
+    keeping: ['justdone', 'delay'],
+    delay: ['keeping', 'residue'],
+    residue: ['delay'],
+  },
+}
+
+/**
+ * Own pool first. If that is short, same-relation pools (any place),
+ * then adjacent relations in this place. Inside does not wrap keeping
+ * to justdone. Outside does not wrap residue to justdone.
+ */
+export function adjacentRelations(rel: Relation, place: Place): Relation[] {
+  return ADJACENT[place][rel]
+}
+
+type Dealt = { place: Place; relation: Relation; pool: string }
+
+const FLOW_IDS: FlowId[] = ['A', 'B', 'C', 'D', 'E', 'F']
+
+function dealt(): Dealt[] {
+  const out: Dealt[] = []
+  for (const id of FLOW_IDS) {
+    const flow = FLOWS[id]
+    out.push({ place: flow.place, relation: flow.a.relation, pool: flow.a.pool })
+    out.push({ place: flow.place, relation: flow.b.relation, pool: flow.b.pool })
+  }
+  return out
+}
+
+export function poolIdsForMontage(ask: FilmAsk, place: Place): string[] {
+  if (!isRelation(ask.relation)) return [ask.pool]
+  const all = dealt()
+  const ids = [ask.pool]
+  for (const row of all) {
+    if (row.relation === ask.relation && row.pool !== ask.pool) ids.push(row.pool)
+  }
+  const adj = adjacentRelations(ask.relation, place)
+  for (const row of all) {
+    if (row.place === place && adj.includes(row.relation)) ids.push(row.pool)
+  }
+  return [...new Set(ids)]
 }

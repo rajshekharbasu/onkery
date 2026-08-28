@@ -3,7 +3,16 @@
  * many at once, then a slow Opener, then one last film?
  */
 
-import { FRAME, HOLD, LAST_ASK, dealSitting, getSitting, type FilmAsk, type Place } from './opener'
+import {
+  FRAME,
+  HOLD,
+  LAST_ASK,
+  dealNextInTrio,
+  dealTrioStart,
+  getSitting,
+  type FilmAsk,
+  type Place,
+} from './opener'
 
 export type { Place }
 export type OpenerBeat = 0 | 1
@@ -11,10 +20,11 @@ export type RecordPhase = 'ready' | 'recording' | 'review'
 
 export type Step =
   | { name: 'welcome' }
+  | { name: 'brief' }
   | { name: 'grant' }
   | { name: 'chooser' }
   | { name: 'denied' }
-  | { name: 'teach'; place: Place }
+  | { name: 'ready'; place: Place; i: number }
   | { name: 'ready'; place: Place; i: number }
   | { name: 'recording'; place: Place; i: number }
   | { name: 'review'; place: Place; i: number }
@@ -64,12 +74,13 @@ export function lastAsk(_place: Place): string {
   return LAST_ASK
 }
 
-export function filmAsks(place: Place): FilmAsk[] {
-  return getSitting().asks[place]
+export function filmAsks(_place: Place): [FilmAsk, ...FilmAsk[]] {
+  return getSitting().asks
 }
 
 export function filmAsk(place: Place, i: number): FilmAsk {
-  return filmAsks(place)[i] ?? filmAsks(place)[0]
+  const asks = filmAsks(place)
+  return asks[i] ?? asks[0]
 }
 
 export function initial(): Step {
@@ -98,6 +109,9 @@ function afterHunt(place: Place, i: number, skipped: boolean): Step {
 export function reduce(state: Step, action: Action): Step {
   switch (state.name) {
     case 'welcome':
+      if (action.type === 'next') return { name: 'brief' }
+      return state
+    case 'brief':
       if (action.type === 'next') return { name: 'grant' }
       return state
     case 'grant':
@@ -106,16 +120,13 @@ export function reduce(state: Step, action: Action): Step {
       return state
     case 'chooser':
       if (action.type === 'choose') {
-        dealSitting(action.place)
-        return { name: 'teach', place: action.place }
+        dealTrioStart(action.place)
+        return { name: 'ready', place: action.place, i: 0 }
       }
       if (action.type === 'denyCamera') return { name: 'denied' }
       return state
     case 'denied':
       if (action.type === 'again') return { name: 'grant' }
-      return state
-    case 'teach':
-      if (action.type === 'next') return { name: 'ready', place: state.place, i: 0 }
       return state
     case 'ready':
       if (action.type === 'tap') return { name: 'recording', place: state.place, i: state.i }
@@ -165,7 +176,11 @@ export function reduce(state: Step, action: Action): Step {
       if (action.type === 'redo') return { ...state, phase: 'ready' }
       return state
     case 'leave':
-      if (action.type === 'again') return { name: 'chooser' }
-      return state
+      if (action.type !== 'again') return state
+      {
+        const next = dealNextInTrio()
+        if (!next) return { name: 'chooser' }
+        return { name: 'ready', place: next.place, i: 0 }
+      }
   }
 }

@@ -4,8 +4,8 @@ import { drawablyButton } from 'drawably'
 import 'drawably/style.css'
 import { RefreshCcw, type IconNode } from 'lucide'
 import { poolFor, type PoolClip } from './bin'
-import { buildMontage } from './montage'
-import { CODA_ASK, getSitting, GRANT, WELCOME } from './opener'
+import { buildMontage, OTHER_MIN } from './montage'
+import { askB, BRIEF, codaAsk, getSitting, GRANT, poolIdsForMontage, RECORD_HINT, WELCOME, type FilmAsk, type Place } from './opener'
 import { saveTake, takesFor } from './store'
 import {
   filmAsk,
@@ -91,7 +91,7 @@ function leaveRecord(action: Action) {
     if (lastTake && lastTake !== takeUrl) URL.revokeObjectURL(lastTake)
     lastTake = takeUrl
     takeUrl = null
-    const poolId = step.name === 'coda' ? CODA_ASK.pool : filmAsk(step.place, step.i).pool
+    const poolId = step.name === 'coda' ? codaAsk().pool : filmAsk(step.place, step.i).pool
     void persistTake(poolId, lastTake)
   }
   if (action.type === 'skip') {
@@ -195,6 +195,15 @@ async function fetchPool(id: string): Promise<PoolClip[]> {
   }
 }
 
+async function fetchMontagePool(ask: FilmAsk, place: Place): Promise<PoolClip[]> {
+  const ids = poolIdsForMontage(ask, place)
+  const ownId = ids[0] ?? ask.pool
+  const own = await fetchPool(ownId)
+  if (own.length >= OTHER_MIN) return own
+  const rest = await Promise.all(ids.slice(1).map(fetchPool))
+  return uniqueClips([own, ...rest].flat())
+}
+
 async function ensureCamera(): Promise<boolean> {
   if (stream) return true
   try {
@@ -294,17 +303,19 @@ function shutterMarkup(pressed: boolean): string {
     </button>`
 }
 
+function montageAsk(step: Step & { name: 'montage' }): FilmAsk {
+  return step.coda ? codaAsk() : filmAsk(step.place, step.i)
+}
+
 function stateDump(): string {
   const lines = Object.entries(step).map(([k, v]) => `${k}: ${v}`)
   const sit = getSitting()
-  if ('place' in step) {
-    const asks = sit.asks[step.place].filter((a) => !a.teach).map((a) => a.id)
-    lines.push(`asks: ${asks.join(', ')}`)
-  }
+  lines.push(`flow: ${sit.flow}`)
+  const asks = sit.asks.filter((a) => !a.teach).map((a) => a.id)
+  if (asks.length) lines.push(`asks: ${asks.join(', ')}`)
   lines.push(`opener: ${sit.opener.id}`)
   if (step.name === 'montage') {
-    const ask = step.coda ? CODA_ASK : filmAsk(step.place, step.i)
-    lines.push(`pool: ${ask.pool}`)
+    lines.push(`pool: ${montageAsk(step).pool}`)
   }
   return lines.join('\n')
 }
@@ -323,11 +334,23 @@ function render() {
 
   if (step.name === 'welcome') {
     app.innerHTML = shell(`
-      <div class="copy copy-mid">
+      <div class="copy copy-home">
         <p class="title">${esc(WELCOME.title)}</p>
-        <p class="prompt">${esc(WELCOME.body)}</p>
-        <p class="hint">${esc(WELCOME.trust)}</p>
+        <p class="lead">${esc(WELCOME.lead)}</p>
         <button class="choice" type="button" data-next>${esc(WELCOME.next)}</button>
+      </div>`)
+    const next = app.querySelector<HTMLButtonElement>('[data-next]')!
+    sketchButton(next)
+    next.onclick = () => dispatch({ type: 'next' })
+    return
+  }
+
+  if (step.name === 'brief') {
+    const lines = BRIEF.lines.map((line) => `<p class="prompt">${esc(line)}</p>`).join('')
+    app.innerHTML = shell(`
+      <div class="copy copy-brief">
+        <div class="copy-stack">${lines}</div>
+        <button class="choice" type="button" data-next>${esc(BRIEF.next)}</button>
       </div>`)
     const next = app.querySelector<HTMLButtonElement>('[data-next]')!
     sketchButton(next)
@@ -388,19 +411,6 @@ function render() {
     return
   }
 
-  if (step.name === 'teach') {
-    app.innerHTML = shell(`
-      ${live}
-      <div class="tap-layer tap-next">
-        <div class="copy copy-mid">
-          <p class="prompt">This is how you take a video.</p>
-        </div>
-      </div>`)
-    bindLive(app.querySelector('video.live')!)
-    app.querySelector('.tap-next')!.addEventListener('click', () => dispatch({ type: 'next' }))
-    return
-  }
-
   if (step.name === 'between') {
     app.innerHTML = shell(`
       ${live}
@@ -417,9 +427,7 @@ function render() {
   if (step.name === 'ready' || step.name === 'recording') {
     const ask = filmAsk(step.place, step.i)
     const pressed = step.name === 'recording' ? 'true' : 'false'
-    const hint = ask.teach
-      ? `<p class="hint">Tap the button below to record.<br>It stops after a couple of seconds.</p>`
-      : ''
+    const hint = ask.teach ? `<p class="hint">${esc(RECORD_HINT)}</p>` : ''
     app.innerHTML = shell(`
       ${live}
       <div class="copy copy-top">
@@ -471,7 +479,7 @@ function render() {
   }
 
   if (step.name === 'montage') {
-    const ask = step.coda ? CODA_ASK : filmAsk(step.place, step.i)
+    const ask = montageAsk(step)
     app.innerHTML = shell(`
       <video class="replay montage-v on" playsinline muted></video>
       <video class="replay montage-v" playsinline muted></video>
@@ -512,7 +520,7 @@ function render() {
       play(0)
     }
 
-    void fetchPool(ask.pool).then((pool) => {
+    void fetchMontagePool(ask, step.place).then((pool) => {
       playCuts(buildMontage(pool, lastTake ? [lastTake] : []))
     })
 
@@ -575,6 +583,7 @@ function render() {
         ${live}
         <div class="copy copy-top">
           <p class="prompt">${esc(lastAsk(step.place))}</p>
+          <p class="hint">${esc(askB().ask)}</p>
         </div>
         <div class="chrome">
           <button class="icon-btn" type="button" data-skip aria-label="Skip">${iconX()}</button>
