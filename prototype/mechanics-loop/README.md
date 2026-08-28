@@ -8,7 +8,7 @@ npm install
 npm run prototype
 ```
 
-Open the HTTPS URL on a phone (same Wi-Fi). Accept the certificate warning. Portrait only. Camera on, no audio.
+Open the HTTPS URL on a phone (same Wi-Fi). Accept the certificate warning. Portrait only. Camera on, no audio. A laptop shows a phone-only screen.
 
 Purpose: [docs/purpose.md](../../docs/purpose.md)
 

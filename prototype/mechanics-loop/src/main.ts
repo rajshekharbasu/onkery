@@ -352,6 +352,10 @@ function stateDump(): string {
 function shell(inner: string): string {
   return `
     <div class="landscape">Turn the phone upright.</div>
+    <div class="desk">
+      <p class="title">This is Onkery.</p>
+      <p class="lead">It lives on a phone. Open this there.</p>
+    </div>
     ${inner}
     <pre class="state">${esc(stateDump())}</pre>`
 }
