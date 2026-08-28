@@ -456,7 +456,7 @@ function render() {
   if (step.name === 'ready' || step.name === 'recording') {
     const ask = filmAsk(step.place, step.i)
     const pressed = step.name === 'recording' ? 'true' : 'false'
-    const hint = ask.teach ? `<p class="hint">${esc(RECORD_HINT)}</p>` : ''
+    const hint = ask.teach && step.i === 0 ? `<p class="hint">${esc(RECORD_HINT)}</p>` : ''
     app.innerHTML = shell(`
       ${live}
       <div class="copy copy-top">

@@ -63,24 +63,24 @@ export const RECORD_HINT = 'Tap the button to record a short video.'
 
 export const THANKS = 'Thank you for being a part of Onkery.'
 
-const TEACH: Record<Place, FilmAsk> = {
-  inside: {
-    id: 'teach-in',
+const TEACH: [FilmAsk, FilmAsk] = [
+  {
+    id: 'teach-anything',
     ask: 'Show me anything.',
     relation: 'teach',
     caption: 'anything',
     pool: 'anything',
     teach: true,
   },
-  outside: {
-    id: 'teach-out',
-    ask: 'Show me anything.',
+  {
+    id: 'teach-fingers',
+    ask: 'Wiggle your fingers.',
     relation: 'teach',
-    caption: 'anything',
-    pool: 'anything',
+    caption: 'wiggling',
+    pool: 'fingers',
     teach: true,
   },
-}
+]
 
 type RelAsk = FilmAsk & { relation: Relation }
 
@@ -225,7 +225,7 @@ function emptySitting(): Sitting {
   return {
     flow: 'A',
     place: 'inside',
-    asks: [withBin(TEACH.inside)],
+    asks: [withBin(TEACH[0])],
     opener: PLANT,
   }
 }
@@ -246,7 +246,7 @@ function openerFor(flow: Flow): Opener {
 function dealFlow(id: FlowId, teach: boolean): Sitting {
   const flow = FLOWS[id]
   const asks: [FilmAsk, ...FilmAsk[]] = teach
-    ? [withBin(TEACH[flow.place]), withBin(flow.a), withBin(flow.b)]
+    ? [withBin(TEACH[0]), withBin(TEACH[1]), withBin(flow.a), withBin(flow.b)]
     : [withBin(flow.a), withBin(flow.b)]
   sitting = {
     flow: id,
