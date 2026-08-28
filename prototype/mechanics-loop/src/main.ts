@@ -5,7 +5,7 @@ import 'drawably/style.css'
 import { RefreshCcw, type IconNode } from 'lucide'
 import { poolFor, type PoolClip } from './bin'
 import { buildMontage, OTHER_MIN } from './montage'
-import { askB, BRIEF, codaAsk, getSitting, GRANT, poolIdsForMontage, RECORD_HINT, THANKS, WELCOME, type FilmAsk, type Place } from './opener'
+import { askB, BRIEF, codaAsk, getSitting, GRANT, LAST_ASK, poolIdsForMontage, RECORD_HINT, THANKS, WELCOME, type FilmAsk, type Place } from './opener'
 import { saveTake, takesFor } from './store'
 import {
   filmAsk,
@@ -602,7 +602,8 @@ function render() {
       app.innerHTML = shell(`
         ${live}
         <div class="copy copy-top">
-          <p class="prompt">${esc(openerAsk())}</p>
+          <p class="prompt">${esc(LAST_ASK)}</p>
+          <p class="hint">${esc(askB().ask)}</p>
         </div>
         <div class="chrome">
           <button class="icon-btn" type="button" data-skip aria-label="Skip">${iconX()}</button>
