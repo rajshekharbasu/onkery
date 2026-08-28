@@ -6,8 +6,6 @@
 import {
   FRAME,
   HOLD,
-  LAST_ASK,
-  dealNextInTrio,
   dealTrioStart,
   getSitting,
   type FilmAsk,
@@ -35,6 +33,7 @@ export type Step =
   | { name: 'hold'; place: Place; i: number }
   | { name: 'coda'; place: Place; phase: RecordPhase }
   | { name: 'leave'; place: Place }
+  | { name: 'thanks' }
 
 export type Action =
   | { type: 'choose'; place: Place }
@@ -68,10 +67,6 @@ export function frameLine(i: number): string {
 
 export function holdLine(i: number): string {
   return HOLD[i] ?? HOLD[0]
-}
-
-export function lastAsk(_place: Place): string {
-  return LAST_ASK
 }
 
 export function filmAsks(_place: Place): [FilmAsk, ...FilmAsk[]] {
@@ -130,16 +125,16 @@ export function reduce(state: Step, action: Action): Step {
       return state
     case 'ready':
       if (action.type === 'tap') return { name: 'recording', place: state.place, i: state.i }
-      if (action.type === 'skip') return afterHunt(state.place, state.i, true)
+      if (action.type === 'skip') return { name: 'thanks' }
       return state
     case 'recording':
       if (action.type === 'autoStop') return { name: 'review', place: state.place, i: state.i }
-      if (action.type === 'skip') return afterHunt(state.place, state.i, true)
+      if (action.type === 'skip') return { name: 'thanks' }
       return state
     case 'review':
       if (action.type === 'keep') return afterHunt(state.place, state.i, false)
       if (action.type === 'redo') return { name: 'ready', place: state.place, i: state.i }
-      if (action.type === 'skip') return afterHunt(state.place, state.i, true)
+      if (action.type === 'skip') return { name: 'thanks' }
       return state
     case 'between':
       if (action.type === 'next') return postAsk(state.place, state.i, 'between')
@@ -163,24 +158,23 @@ export function reduce(state: Step, action: Action): Step {
     case 'coda':
       if (state.phase === 'ready') {
         if (action.type === 'tap') return { ...state, phase: 'recording' }
-        if (action.type === 'skip') return { name: 'leave', place: state.place }
+        if (action.type === 'skip') return { name: 'thanks' }
         return state
       }
       if (state.phase === 'recording') {
         if (action.type === 'autoStop') return { ...state, phase: 'review' }
-        if (action.type === 'skip') return { name: 'leave', place: state.place }
+        if (action.type === 'skip') return { name: 'thanks' }
         return state
       }
       if (action.type === 'keep') return { name: 'montage', place: state.place, i: 0, coda: true }
-      if (action.type === 'skip') return { name: 'leave', place: state.place }
+      if (action.type === 'skip') return { name: 'thanks' }
       if (action.type === 'redo') return { ...state, phase: 'ready' }
       return state
     case 'leave':
-      if (action.type !== 'again') return state
-      {
-        const next = dealNextInTrio()
-        if (!next) return { name: 'chooser' }
-        return { name: 'ready', place: next.place, i: 0 }
-      }
+      if (action.type === 'again' || action.type === 'next') return { name: 'chooser' }
+      return state
+    case 'thanks':
+      if (action.type === 'again' || action.type === 'next') return { name: 'chooser' }
+      return state
   }
 }

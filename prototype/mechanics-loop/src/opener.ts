@@ -25,6 +25,7 @@ export type Opener = {
   id: string
   ask: string
   relation: Relation
+  pool: string
   src?: string
   line?: string
 }
@@ -59,6 +60,8 @@ export const GRANT = {
 }
 
 export const RECORD_HINT = 'Tap the button to record a short video.'
+
+export const THANKS = 'Thank you for being a part of Onkery.'
 
 const TEACH: Record<Place, FilmAsk> = {
   inside: {
@@ -180,6 +183,7 @@ const PLANT: Opener = {
   id: 'op-delay-care',
   relation: 'delay',
   ask: ASK['in-delay-care'].ask,
+  pool: ASK['in-delay-care'].pool,
   src: '/opener.mp4',
   line: "I'll get to it",
 }
@@ -236,7 +240,7 @@ function isRelation(rel: FilmAsk['relation']): rel is Relation {
 
 function openerFor(flow: Flow): Opener {
   if (flow.id === 'A' || flow.id === 'B') return PLANT
-  return { id: `op-${flow.b.id}`, relation: flow.b.relation, ask: flow.b.ask }
+  return { id: `op-${flow.b.id}`, relation: flow.b.relation, ask: flow.b.ask, pool: flow.b.pool }
 }
 
 function dealFlow(id: FlowId, teach: boolean): Sitting {

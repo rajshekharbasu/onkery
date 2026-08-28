@@ -5,14 +5,13 @@ import 'drawably/style.css'
 import { RefreshCcw, type IconNode } from 'lucide'
 import { poolFor, type PoolClip } from './bin'
 import { buildMontage, OTHER_MIN } from './montage'
-import { askB, BRIEF, codaAsk, getSitting, GRANT, poolIdsForMontage, RECORD_HINT, WELCOME, type FilmAsk, type Place } from './opener'
+import { askB, BRIEF, codaAsk, getSitting, GRANT, poolIdsForMontage, RECORD_HINT, THANKS, WELCOME, type FilmAsk, type Place } from './opener'
 import { saveTake, takesFor } from './store'
 import {
   filmAsk,
   frameLine,
   holdLine,
   initial,
-  lastAsk,
   openerAsk,
   openerLine,
   openerSrc,
@@ -37,6 +36,7 @@ let chunks: Blob[] = []
 let takeUrl: string | null = null
 let lastTake: string | null = null
 let lastSavedId: string | null = null
+let shownOpener: string | null = null
 let stopTimer: number | null = null
 let cutTimer: number | null = null
 let sketches: { destroy(): void }[] = []
@@ -106,6 +106,7 @@ function resetSitting() {
   if (lastTake) URL.revokeObjectURL(lastTake)
   lastTake = null
   lastSavedId = null
+  shownOpener = null
   revokeTake()
 }
 
@@ -227,22 +228,50 @@ function bindLive(el: HTMLVideoElement) {
   void el.play()
 }
 
+function pickOtherSrc(clips: PoolClip[], mine: string | null): string | undefined {
+  const others = clips.filter((c) => c.src !== mine)
+  if (others.length === 0) return undefined
+  return others[Math.floor(Math.random() * others.length)].src
+}
+
 function bindOpenerClip(el: HTMLVideoElement) {
-  const src = openerSrc()
-  if (!src) {
-    bindLive(el)
+  const play = (src: string) => {
+    if (!el.isConnected) return
+    el.srcObject = null
+    el.src = src
+    el.muted = true
+    el.loop = true
+    el.playsInline = true
+    void el.play()
+  }
+
+  if (shownOpener) {
+    play(shownOpener)
     return
   }
-  el.srcObject = null
-  el.src = src
-  el.muted = true
-  el.loop = true
-  el.playsInline = true
-  el.onerror = () => {
-    el.removeAttribute('src')
-    bindLive(el)
+
+  const other = fetchMontagePool(askB(), getSitting().place).then((pool) => pickOtherSrc(pool, lastTake))
+  const useOther = () => {
+    void other.then((src) => {
+      if (!src || !el.isConnected || shownOpener) return
+      shownOpener = src
+      play(src)
+    })
   }
-  void el.play()
+
+  const plant = openerSrc()
+  if (!plant) {
+    useOther()
+    return
+  }
+  el.onerror = () => {
+    el.onerror = null
+    useOther()
+  }
+  el.onloadeddata = () => {
+    shownOpener = plant
+  }
+  play(plant)
 }
 
 function stopCuts() {
@@ -487,14 +516,6 @@ function render() {
         <div class="copy copy-caption"><p class="line montage-line">${esc(ask.caption)}</p></div>
       </div>`)
     const vids = [...app.querySelectorAll<HTMLVideoElement>('video.montage-v')]
-    const caption = app.querySelector<HTMLParagraphElement>('.montage-line')!
-
-    const pulseCaption = () => {
-      caption.textContent = ask.caption
-      caption.classList.remove('cut')
-      void caption.offsetWidth
-      caption.classList.add('cut')
-    }
 
     const playCuts = (cuts: ReturnType<typeof buildMontage>) => {
       if (!cuts.length || !vids[0].isConnected) {
@@ -508,7 +529,6 @@ function render() {
         el.muted = true
         void el.play()
         vids.forEach((v) => v.classList.toggle('on', v === el))
-        pulseCaption()
         const next = cuts[(i + 1) % cuts.length]
         const ahead = vids[(i + 1) % 2]
         if (ahead !== el) {
@@ -533,13 +553,13 @@ function render() {
 
   if (step.name === 'frame') {
     app.innerHTML = shell(`
-      ${live}
+      <video class="replay opener-clip" playsinline loop muted></video>
       <div class="tap-layer tap-next">
         <div class="copy copy-mid">
           <p class="prompt">${esc(frameLine(step.i))}</p>
         </div>
       </div>`)
-    bindLive(app.querySelector('video.live')!)
+    bindOpenerClip(app.querySelector<HTMLVideoElement>('video.opener-clip')!)
     app.querySelector('.tap-next')!.addEventListener('click', () => dispatch({ type: 'next' }))
     return
   }
@@ -582,8 +602,7 @@ function render() {
       app.innerHTML = shell(`
         ${live}
         <div class="copy copy-top">
-          <p class="prompt">${esc(lastAsk(step.place))}</p>
-          <p class="hint">${esc(askB().ask)}</p>
+          <p class="prompt">${esc(openerAsk())}</p>
         </div>
         <div class="chrome">
           <button class="icon-btn" type="button" data-skip aria-label="Skip">${iconX()}</button>
@@ -632,6 +651,20 @@ function render() {
         </div>
       </div>`)
     bindLive(app.querySelector('video.live')!)
+    app.querySelector('.tap-next')!.addEventListener('click', () => {
+      resetSitting()
+      dispatch({ type: 'again' })
+    })
+    return
+  }
+
+  if (step.name === 'thanks') {
+    app.innerHTML = shell(`
+      <div class="tap-layer tap-next">
+        <div class="copy copy-mid">
+          <p class="prompt">${esc(THANKS)}</p>
+        </div>
+      </div>`)
     app.querySelector('.tap-next')!.addEventListener('click', () => {
       resetSitting()
       dispatch({ type: 'again' })
