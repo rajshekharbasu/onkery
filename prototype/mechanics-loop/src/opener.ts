@@ -243,6 +243,69 @@ function openerFor(flow: Flow): Opener {
   return { id: `op-${flow.b.id}`, relation: flow.b.relation, ask: flow.b.ask, pool: flow.b.pool }
 }
 
+const FLOW_KEY = 'onkery:last-flow'
+
+type SavedFlows = { inside?: FlowId; outside?: FlowId }
+
+function isFlowId(value: unknown): value is FlowId {
+  return value === 'A' || value === 'B' || value === 'C' || value === 'D' || value === 'E' || value === 'F'
+}
+
+function ownField(obj: object, key: string): unknown {
+  return Object.getOwnPropertyDescriptor(obj, key)?.value
+}
+
+function flowForPlace(id: unknown, place: Place): FlowId | undefined {
+  if (!isFlowId(id) || FLOWS[id].place !== place) return undefined
+  return id
+}
+
+function readSaved(): SavedFlows {
+  try {
+    const raw = localStorage.getItem(FLOW_KEY)
+    if (!raw) return {}
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return {}
+    const inside = flowForPlace(ownField(parsed, 'inside'), 'inside')
+    const outside = flowForPlace(ownField(parsed, 'outside'), 'outside')
+    const saved: SavedFlows = {}
+    if (inside) saved.inside = inside
+    if (outside) saved.outside = outside
+    return saved
+  } catch {
+    return {}
+  }
+}
+
+function rememberFlow(id: FlowId): void {
+  const saved = readSaved()
+  saved[FLOWS[id].place] = id
+  try {
+    localStorage.setItem(FLOW_KEY, JSON.stringify(saved))
+  } catch {
+    /* private mode */
+  }
+}
+
+function readLastFlow(place: Place): FlowId | undefined {
+  return readSaved()[place]
+}
+
+function wrapNext(id: FlowId): FlowId {
+  if (id === 'A') return 'B'
+  if (id === 'B') return 'C'
+  if (id === 'C') return 'A'
+  if (id === 'D') return 'E'
+  if (id === 'E') return 'F'
+  return 'D'
+}
+
+function startFlow(place: Place): FlowId {
+  const last = readLastFlow(place)
+  if (!last) return place === 'inside' ? 'A' : 'D'
+  return wrapNext(last)
+}
+
 function dealFlow(id: FlowId, teach: boolean): Sitting {
   const flow = FLOWS[id]
   const asks: [FilmAsk, ...FilmAsk[]] = teach
@@ -254,11 +317,13 @@ function dealFlow(id: FlowId, teach: boolean): Sitting {
     asks,
     opener: openerFor(flow),
   }
+  rememberFlow(id)
   return sitting
 }
 
+/** After a chooser. Walks to the next flow in this place so a return is a new hand. */
 export function dealTrioStart(place: Place): Sitting {
-  return dealFlow(place === 'inside' ? 'A' : 'D', true)
+  return dealFlow(startFlow(place), true)
 }
 
 export function nextFlowId(id: FlowId): FlowId | undefined {

@@ -6,6 +6,7 @@
 import {
   FRAME,
   HOLD,
+  dealNextInTrio,
   dealTrioStart,
   getSitting,
   type FilmAsk,
@@ -171,8 +172,9 @@ export function reduce(state: Step, action: Action): Step {
       if (action.type === 'redo') return { ...state, phase: 'ready' }
       return state
     case 'leave':
-      if (action.type === 'again' || action.type === 'next') return { name: 'chooser' }
-      return state
+      if (action.type !== 'again' && action.type !== 'next') return state
+      if (!dealNextInTrio()) return { name: 'chooser' }
+      return { name: 'ready', place: state.place, i: 0 }
     case 'thanks':
       if (action.type === 'again' || action.type === 'next') return { name: 'chooser' }
       return state
