@@ -5,6 +5,9 @@
   --drawably-stroke: #f4f1ea;
   --drawably-fill: #f4f1ea;
   --drawably-ink: #f4f1ea;
+  --sit-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --sit-ms: 180ms;
+  --leave-ms: 220ms;
   font-family: Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
@@ -205,6 +208,11 @@ button {
   height: 4.4rem;
   padding: 0;
   border-radius: 999px;
+  transition: transform 120ms var(--sit-ease);
+}
+
+.shutter[aria-pressed='true'] {
+  transform: scale(0.97);
 }
 
 .shutter-ring {
@@ -231,19 +239,34 @@ button {
 }
 
 .shutter[aria-pressed='true'] .fill {
-  animation: shutter-fill var(--record-ms) linear forwards;
+  animation: shutter-fill var(--record-ms) var(--sit-ease) forwards;
 }
 
 .shutter-core {
   position: absolute;
   inset: 0.78rem;
+  overflow: hidden;
   border-radius: 999px;
   border: 1.5px solid rgb(255 255 255 / 0.9);
   background: transparent;
 }
 
-.shutter[aria-pressed='true'] .shutter-core {
+.shutter-core::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   background: #fff;
+  opacity: 0;
+  transform: scale(0.72);
+  transition:
+    opacity var(--sit-ms) var(--sit-ease),
+    transform var(--record-ms) var(--sit-ease);
+}
+
+.shutter[aria-pressed='true'] .shutter-core::after {
+  opacity: 1;
+  transform: none;
 }
 
 @keyframes shutter-fill {
@@ -326,6 +349,43 @@ button {
   }
 }
 
+.room {
+  z-index: 0;
+}
+
+.room.off {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.stages {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--sit-ms) var(--sit-ease), transform var(--sit-ms) var(--sit-ease);
+  pointer-events: none;
+}
+
+.stage.show {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.stage.instant {
+  transition: none;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
 .state {
   position: absolute;
   top: 0.45rem;
@@ -347,16 +407,89 @@ button {
   cursor: pointer;
 }
 
-.montage-v {
+.montage-v,
+.hold-v {
   opacity: 0;
 }
 
-.montage-v.on {
+.montage-v.on,
+.hold-v.on {
   opacity: 1;
+}
+
+.hold-v {
+  transform: none;
+}
+
+.hold-v.join {
+  transform: scale(0.97);
+  transition: transform var(--sit-ms) var(--sit-ease);
 }
 
 .montage-line {
   margin: 0;
   font-size: 1.2rem;
   letter-spacing: 0.03em;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .stage {
+    transform: none;
+    transition-duration: 80ms;
+  }
+
+  .shutter-core::after {
+    transition-duration: 80ms;
+  }
+
+  .shutter[aria-pressed='true'] .fill {
+    animation-timing-function: linear;
+  }
+
+  .shutter[aria-pressed='true'] {
+    transform: none;
+  }
+
+  .shutter-core::after {
+    transform: none;
+    transition-duration: 80ms;
+  }
+
+  .hold-v.join {
+    transform: none;
+    transition-duration: 80ms;
+  }
+}
+
+.copy-home .copy-stack .prompt,
+.copy-home .copy-stack .hint {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+
+.leave-pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.65rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 10rem;
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity var(--sit-ms) var(--sit-ease), transform var(--sit-ms) var(--sit-ease);
+  z-index: 4;
+}
+
+.leave-pop.show {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.leave-pop .choice {
+  margin: 0;
 }

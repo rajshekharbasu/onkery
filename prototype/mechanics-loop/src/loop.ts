@@ -47,6 +47,7 @@ export type Action =
   | { type: 'skip' }
   | { type: 'seen' }
   | { type: 'again' }
+  | { type: 'exit' }
 
 export const RECORD_MS = 2000
 
@@ -126,16 +127,19 @@ export function reduce(state: Step, action: Action): Step {
       return state
     case 'ready':
       if (action.type === 'tap') return { name: 'recording', place: state.place, i: state.i }
-      if (action.type === 'skip') return { name: 'thanks' }
+      if (action.type === 'skip') return afterHunt(state.place, state.i, true)
+      if (action.type === 'exit') return { name: 'thanks' }
       return state
     case 'recording':
       if (action.type === 'autoStop') return { name: 'review', place: state.place, i: state.i }
-      if (action.type === 'skip') return { name: 'thanks' }
+      if (action.type === 'skip') return afterHunt(state.place, state.i, true)
+      if (action.type === 'exit') return { name: 'thanks' }
       return state
     case 'review':
       if (action.type === 'keep') return afterHunt(state.place, state.i, false)
       if (action.type === 'redo') return { name: 'ready', place: state.place, i: state.i }
-      if (action.type === 'skip') return { name: 'thanks' }
+      if (action.type === 'skip') return afterHunt(state.place, state.i, true)
+      if (action.type === 'exit') return { name: 'thanks' }
       return state
     case 'between':
       if (action.type === 'next') return postAsk(state.place, state.i, 'between')
@@ -159,16 +163,19 @@ export function reduce(state: Step, action: Action): Step {
     case 'coda':
       if (state.phase === 'ready') {
         if (action.type === 'tap') return { ...state, phase: 'recording' }
-        if (action.type === 'skip') return { name: 'thanks' }
+        if (action.type === 'skip') return { name: 'leave', place: state.place }
+        if (action.type === 'exit') return { name: 'thanks' }
         return state
       }
       if (state.phase === 'recording') {
         if (action.type === 'autoStop') return { ...state, phase: 'review' }
-        if (action.type === 'skip') return { name: 'thanks' }
+        if (action.type === 'skip') return { name: 'leave', place: state.place }
+        if (action.type === 'exit') return { name: 'thanks' }
         return state
       }
       if (action.type === 'keep') return { name: 'montage', place: state.place, i: 0, coda: true }
-      if (action.type === 'skip') return { name: 'thanks' }
+      if (action.type === 'skip') return { name: 'leave', place: state.place }
+      if (action.type === 'exit') return { name: 'thanks' }
       if (action.type === 'redo') return { ...state, phase: 'ready' }
       return state
     case 'leave':

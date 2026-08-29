@@ -94,7 +94,7 @@ function leaveRecord(action: Action) {
     const poolId = step.name === 'coda' ? codaAsk().pool : filmAsk(step.place, step.i).pool
     void persistTake(poolId, lastTake)
   }
-  if (action.type === 'skip') {
+  if (action.type === 'skip' || action.type === 'exit') {
     if (lastTake) URL.revokeObjectURL(lastTake)
     lastTake = null
   }
@@ -186,7 +186,9 @@ async function fetchPool(id: string): Promise<PoolClip[]> {
     /* private mode */
   }
   try {
-    const res = await fetch(`/api/pool?id=${encodeURIComponent(id)}`)
+    const res = await fetch(`/api/pool?id=${encodeURIComponent(id)}`, {
+      signal: AbortSignal.timeout(4000),
+    })
     if (!res.ok) return uniqueClips([...seed, ...local])
     const live = clipsFrom(urlsFrom(await res.json()))
     if (live.length) return uniqueClips([...seed, ...live])
@@ -349,58 +351,155 @@ function stateDump(): string {
   return lines.join('\n')
 }
 
-function shell(inner: string): string {
-  return `
+
+const SIT_MS = 180
+const LEAVE_MS = 220
+
+function ensureFrame() {
+  if (app.querySelector('.stages')) return
+  app.innerHTML = `
     <div class="landscape">Turn the phone upright.</div>
     <div class="desk">
       <p class="title">This is Onkery.</p>
       <p class="lead">It lives on a phone. Open this there.</p>
     </div>
-    ${inner}
-    <pre class="state">${esc(stateDump())}</pre>`
+    <video class="live room off" autoplay muted playsinline></video>
+    <div class="stages"></div>
+    ${new URLSearchParams(location.search).has('debug') ? '<pre class="state"></pre>' : ''}`
+}
+
+function liveOn(on: boolean) {
+  const el = app.querySelector<HTMLVideoElement>('video.room')
+  if (!el) return
+  el.classList.toggle('off', !on)
+  if (on) bindLive(el)
+}
+
+function paint(inner: string, instant = false): HTMLElement {
+  ensureFrame()
+  const dump = app.querySelector('.state')
+  if (dump) dump.textContent = stateDump()
+  const stages = app.querySelector('.stages')!
+  const prev = [...stages.querySelectorAll<HTMLElement>('.stage')]
+  const next = document.createElement('div')
+  next.className = instant ? 'stage instant show' : 'stage'
+  next.innerHTML = inner
+  stages.appendChild(next)
+  if (instant) {
+    prev.forEach((el) => el.remove())
+    return next
+  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      next.classList.add('show')
+      prev.forEach((el) => el.classList.remove('show'))
+    })
+  })
+  window.setTimeout(() => prev.forEach((el) => el.remove()), SIT_MS + 40)
+  return next
+}
+
+function dissolveThen(done: () => void) {
+  const shown = app.querySelector<HTMLElement>('.stage.show')
+  shown?.classList.remove('show')
+  window.setTimeout(done, LEAVE_MS)
+}
+
+
+function leavePopMarkup(): string {
+  return `
+    <div class="leave-pop">
+      <button class="choice" type="button" data-skip-ask>Skip</button>
+      <button class="choice" type="button" data-exit>Exit</button>
+    </div>`
+}
+
+function bindLeavePop(root: HTMLElement) {
+  const pop = root.querySelector<HTMLElement>('.leave-pop')
+  const skip = root.querySelector<HTMLButtonElement>('[data-skip]')
+  if (!pop || !skip) return
+  const open = () => {
+    pop.classList.add('show')
+    pop.querySelectorAll<HTMLButtonElement>('.choice').forEach((btn) => {
+      if (btn.dataset.sketched) return
+      sketchButton(btn)
+      btn.dataset.sketched = '1'
+    })
+  }
+  skip.onclick = (e) => {
+    e.stopPropagation()
+    if (pop.classList.contains('show')) pop.classList.remove('show')
+    else open()
+  }
+  pop.querySelector<HTMLButtonElement>('[data-skip-ask]')!.onclick = (e) => {
+    e.stopPropagation()
+    leaveRecord({ type: 'skip' })
+  }
+  pop.querySelector<HTMLButtonElement>('[data-exit]')!.onclick = (e) => {
+    e.stopPropagation()
+    leaveRecord({ type: 'exit' })
+  }
+}
+
+function pressShutter() {
+  const existing = app.querySelector<HTMLButtonElement>('.stage .shutter')
+  if (!existing) return false
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => existing.setAttribute('aria-pressed', 'true'))
+  })
+  return true
 }
 
 function render() {
+  const recording =
+    step.name === 'recording' || (step.name === 'coda' && step.phase === 'recording')
+  if (recording && pressShutter()) return
   clearSketches()
   stopCuts()
-  const live = `<video class="live" autoplay muted playsinline></video>`
 
   if (step.name === 'welcome') {
-    app.innerHTML = shell(`
+    liveOn(false)
+    const root = paint(`
       <div class="copy copy-home">
         <p class="title">${esc(WELCOME.title)}</p>
         <p class="lead">${esc(WELCOME.lead)}</p>
         <button class="choice" type="button" data-next>${esc(WELCOME.next)}</button>
       </div>`)
-    const next = app.querySelector<HTMLButtonElement>('[data-next]')!
+    const next = root.querySelector<HTMLButtonElement>('[data-next]')!
     sketchButton(next)
     next.onclick = () => dispatch({ type: 'next' })
     return
   }
 
   if (step.name === 'brief') {
+    liveOn(false)
     const lines = BRIEF.lines.map((line) => `<p class="prompt">${esc(line)}</p>`).join('')
-    app.innerHTML = shell(`
+    const root = paint(`
       <div class="copy copy-brief">
         <div class="copy-stack">${lines}</div>
         <button class="choice" type="button" data-next>${esc(BRIEF.next)}</button>
       </div>`)
-    const next = app.querySelector<HTMLButtonElement>('[data-next]')!
+    const next = root.querySelector<HTMLButtonElement>('[data-next]')!
     sketchButton(next)
     next.onclick = () => dispatch({ type: 'next' })
     return
   }
 
   if (step.name === 'grant') {
-    app.innerHTML = shell(`
-      <div class="copy copy-mid">
-        <p class="prompt">${esc(GRANT.ask)}</p>
-        <p class="hint">${esc(GRANT.hint)}</p>
+    liveOn(false)
+    const root = paint(`
+      <div class="copy copy-home">
+        <div class="copy-stack">
+          <p class="prompt">${esc(GRANT.ask)}</p>
+          <p class="hint">${esc(GRANT.hint)}</p>
+        </div>
         <button class="choice" type="button" data-allow>${esc(GRANT.allow)}</button>
       </div>`)
-    const allow = app.querySelector<HTMLButtonElement>('[data-allow]')!
+    const allow = root.querySelector<HTMLButtonElement>('[data-allow]')!
     sketchButton(allow)
     allow.onclick = async () => {
+      allow.dataset.state = 'loading'
+      allow.disabled = true
       const ok = await ensureCamera()
       if (ok) dispatch({ type: 'next' })
     }
@@ -408,19 +507,18 @@ function render() {
   }
 
   if (step.name === 'chooser') {
-    app.innerHTML = shell(`
-      ${live}
+    liveOn(true)
+    void ensureCamera().then((ok) => {
+      if (ok) liveOn(true)
+    })
+    const root = paint(`
       <div class="copy copy-mid">
         <p class="prompt">Are you outside, or indoors, right now?</p>
         <button class="choice" type="button" data-place="inside">I'm indoors</button>
         <button class="choice" type="button" data-place="outside">I'm outside</button>
         <p class="hint">It doesn't work very well inside a vehicle.</p>
       </div>`)
-    const video = app.querySelector<HTMLVideoElement>('video.live')!
-    void ensureCamera().then((ok) => {
-      if (ok) bindLive(video)
-    })
-    app.querySelectorAll<HTMLButtonElement>('[data-place]').forEach((btn) => {
+    root.querySelectorAll<HTMLButtonElement>('[data-place]').forEach((btn) => {
       sketchButton(btn)
       btn.onclick = async () => {
         const place = btn.dataset.place === 'outside' ? 'outside' : 'inside'
@@ -432,28 +530,30 @@ function render() {
   }
 
   if (step.name === 'denied') {
-    app.innerHTML = shell(`
-      <div class="copy copy-mid">
-        <p class="prompt">You won't be able to continue unless you grant access to the camera.</p>
-        <p class="hint">No audio will be recorded.</p>
+    liveOn(false)
+    const root = paint(`
+      <div class="copy copy-home">
+        <div class="copy-stack">
+          <p class="prompt">You won't be able to continue unless you grant access to the camera.</p>
+          <p class="hint">No audio will be recorded.</p>
+        </div>
         <button class="choice" type="button" data-again>Try again</button>
       </div>`)
-    const again = app.querySelector<HTMLButtonElement>('[data-again]')!
+    const again = root.querySelector<HTMLButtonElement>('[data-again]')!
     sketchButton(again)
     again.onclick = () => dispatch({ type: 'again' })
     return
   }
 
   if (step.name === 'between') {
-    app.innerHTML = shell(`
-      ${live}
+    liveOn(true)
+    const root = paint(`
       <div class="tap-layer tap-next">
         <div class="copy copy-mid">
           <p class="prompt">${esc(step.text)}</p>
         </div>
       </div>`)
-    bindLive(app.querySelector('video.live')!)
-    app.querySelector('.tap-next')!.addEventListener('click', () => dispatch({ type: 'next' }))
+    root.querySelector('.tap-next')!.addEventListener('click', () => dispatch({ type: 'next' }))
     return
   }
 
@@ -461,20 +561,20 @@ function render() {
     const ask = filmAsk(step.place, step.i)
     const pressed = step.name === 'recording' ? 'true' : 'false'
     const hint = ask.teach && step.i === 0 ? `<p class="hint">${esc(RECORD_HINT)}</p>` : ''
-    app.innerHTML = shell(`
-      ${live}
+    liveOn(true)
+    const root = paint(`
       <div class="copy copy-top">
         <p class="prompt">${esc(ask.ask)}</p>
         ${hint}
       </div>
       <div class="chrome">
         <button class="icon-btn" type="button" data-skip aria-label="Skip">${iconX()}</button>
-        ${shutterMarkup(pressed === 'true')}
+        ${shutterMarkup(false)}
         <span class="chrome-slot"></span>
-      </div>`)
-    bindLive(app.querySelector('video.live')!)
-    app.querySelector<HTMLButtonElement>('[data-skip]')!.onclick = () => leaveRecord({ type: 'skip' })
-    app.querySelector<HTMLButtonElement>('.shutter')!.onclick = () => {
+        ${leavePopMarkup()}
+      </div>`, recording)
+    bindLeavePop(root)
+    root.querySelector<HTMLButtonElement>('.shutter')!.onclick = () => {
       if (step.name !== 'ready') return
       dispatch({ type: 'tap' })
       startRecording()
@@ -484,7 +584,8 @@ function render() {
 
   if (step.name === 'review') {
     const first = filmAsk(step.place, step.i).teach
-    app.innerHTML = shell(`
+    liveOn(false)
+    const root = paint(`
       <video class="replay" playsinline loop muted></video>
       <div class="copy copy-top">
         ${first ? `<p class="prompt">Press OK to continue, or refresh to redo.</p>` : ''}
@@ -493,33 +594,44 @@ function render() {
         <button class="icon-btn" type="button" data-skip aria-label="Skip">${iconX()}</button>
         <button class="icon-btn" type="button" data-redo aria-label="Redo">${lucideIcon(RefreshCcw)}</button>
         <button class="ok" type="button">OK</button>
+        ${leavePopMarkup()}
       </div>`)
-    const replay = app.querySelector<HTMLVideoElement>('video.replay')!
+    const replay = root.querySelector<HTMLVideoElement>('video.replay')!
     if (takeUrl) {
       replay.src = takeUrl
       replay.muted = true
       void replay.play()
     }
-    sketchButton(app.querySelector<HTMLButtonElement>('.ok')!)
-    app.querySelector<HTMLButtonElement>('[data-redo]')!.onclick = () => {
+    sketchButton(root.querySelector<HTMLButtonElement>('.ok')!)
+    root.querySelector<HTMLButtonElement>('[data-redo]')!.onclick = () => {
       stopRecording()
       revokeTake()
       dispatch({ type: 'redo' })
     }
-    app.querySelector<HTMLButtonElement>('.ok')!.onclick = () => leaveRecord({ type: 'keep' })
-    app.querySelector<HTMLButtonElement>('[data-skip]')!.onclick = () => leaveRecord({ type: 'skip' })
+    root.querySelector<HTMLButtonElement>('.ok')!.onclick = () => leaveRecord({ type: 'keep' })
+    bindLeavePop(root)
     return
   }
 
   if (step.name === 'montage') {
     const ask = montageAsk(step)
-    app.innerHTML = shell(`
-      <video class="replay montage-v on" playsinline muted></video>
+    const hold = lastTake
+    if (hold) liveOn(false)
+    else liveOn(true)
+    const root = paint(`
+      ${hold ? `<video class="replay hold-v on" playsinline loop muted></video>` : ''}
+      <video class="replay montage-v" playsinline muted></video>
       <video class="replay montage-v" playsinline muted></video>
       <div class="tap-layer tap-next">
         <div class="copy copy-caption"><p class="line montage-line">${esc(ask.caption)}</p></div>
       </div>`)
-    const vids = [...app.querySelectorAll<HTMLVideoElement>('video.montage-v')]
+    const holdEl = root.querySelector<HTMLVideoElement>('video.hold-v')
+    if (holdEl && hold) {
+      holdEl.src = hold
+      holdEl.muted = true
+      void holdEl.play()
+    }
+    const vids = [...root.querySelectorAll<HTMLVideoElement>('video.montage-v')]
 
     const playCuts = (cuts: ReturnType<typeof buildMontage>) => {
       if (!cuts.length || !vids[0].isConnected) {
@@ -529,26 +641,68 @@ function render() {
       const play = (i: number) => {
         if (!vids[0].isConnected) return
         const el = vids[i % 2]
-        el.src = cuts[i].src
+        if (el.getAttribute('src') !== cuts[i].src) el.src = cuts[i].src
         el.muted = true
-        void el.play()
-        vids.forEach((v) => v.classList.toggle('on', v === el))
-        const next = cuts[(i + 1) % cuts.length]
-        const ahead = vids[(i + 1) % 2]
-        if (ahead !== el) {
-          ahead.src = next.src
-          ahead.load()
+        let shown = false
+        const show = () => {
+          if (shown || !el.isConnected) return
+          shown = true
+          void el.play()
+          vids.forEach((v) => v.classList.toggle('on', v === el))
+          holdEl?.classList.remove('on', 'join')
+          liveOn(false)
+          const nxt = cuts[(i + 1) % cuts.length]
+          const ahead = vids[(i + 1) % 2]
+          if (ahead !== el) {
+            ahead.src = nxt.src
+            ahead.load()
+          }
+          cutTimer = window.setTimeout(() => play((i + 1) % cuts.length), cuts[i].ms)
         }
-        cutTimer = window.setTimeout(() => play((i + 1) % cuts.length), cuts[i].ms)
+        if (el.readyState >= 2) show()
+        else {
+          const wait = window.setTimeout(show, 180)
+          el.addEventListener('loadeddata', () => {
+            window.clearTimeout(wait)
+            show()
+          }, { once: true })
+        }
       }
       play(0)
     }
 
+    const readyThen = (cuts: ReturnType<typeof buildMontage>) => {
+      if (!cuts.length) {
+        playCuts(cuts)
+        return
+      }
+      const first = vids[0]
+      if (!first) {
+        playCuts(cuts)
+        return
+      }
+      let started = false
+      const go = () => {
+        if (started) return
+        started = true
+        if (holdEl?.classList.contains('on')) {
+          holdEl.classList.add('join')
+          window.setTimeout(() => playCuts(cuts), SIT_MS)
+          return
+        }
+        playCuts(cuts)
+      }
+      first.src = cuts[0].src
+      first.muted = true
+      first.addEventListener('loadeddata', go, { once: true })
+      window.setTimeout(go, 6000)
+    }
+
     void fetchMontagePool(ask, step.place).then((pool) => {
-      playCuts(buildMontage(pool, lastTake ? [lastTake] : []))
+      readyThen(buildMontage(pool, lastTake ? [lastTake] : []))
     })
 
-    app.querySelector('.tap-next')!.addEventListener('click', () => {
+    root.querySelector('.tap-next')!.addEventListener('click', () => {
       stopCuts()
       dispatch({ type: 'next' })
     })
@@ -556,15 +710,16 @@ function render() {
   }
 
   if (step.name === 'frame') {
-    app.innerHTML = shell(`
+    liveOn(false)
+    const root = paint(`
       <video class="replay opener-clip" playsinline loop muted></video>
       <div class="tap-layer tap-next">
         <div class="copy copy-mid">
           <p class="prompt">${esc(frameLine(step.i))}</p>
         </div>
       </div>`)
-    bindOpenerClip(app.querySelector<HTMLVideoElement>('video.opener-clip')!)
-    app.querySelector('.tap-next')!.addEventListener('click', () => dispatch({ type: 'next' }))
+    bindOpenerClip(root.querySelector<HTMLVideoElement>('video.opener-clip')!)
+    root.querySelector('.tap-next')!.addEventListener('click', () => dispatch({ type: 'next' }))
     return
   }
 
@@ -577,102 +732,108 @@ function render() {
         : line
           ? `<p class="line">${esc(line)}</p>`
           : ''
-    app.innerHTML = shell(`
+    liveOn(false)
+    const root = paint(`
       <video class="replay opener-clip" playsinline loop muted></video>
       <div class="tap-layer tap-next">
         <div class="copy copy-mid">${body}</div>
       </div>`)
-    bindOpenerClip(app.querySelector<HTMLVideoElement>('video.opener-clip')!)
-    app.querySelector('.tap-next')!.addEventListener('click', () => dispatch({ type: 'next' }))
+    bindOpenerClip(root.querySelector<HTMLVideoElement>('video.opener-clip')!)
+    root.querySelector('.tap-next')!.addEventListener('click', () => dispatch({ type: 'next' }))
     return
   }
 
   if (step.name === 'hold') {
-    app.innerHTML = shell(`
-      ${live}
+    liveOn(true)
+    const root = paint(`
       <div class="tap-layer tap-next">
         <div class="copy copy-mid">
           <p class="prompt">${esc(holdLine(step.i))}</p>
         </div>
       </div>`)
-    bindLive(app.querySelector('video.live')!)
-    app.querySelector('.tap-next')!.addEventListener('click', () => dispatch({ type: 'next' }))
+    root.querySelector('.tap-next')!.addEventListener('click', () => dispatch({ type: 'next' }))
     return
   }
 
   if (step.name === 'coda') {
     const pressed = step.phase === 'recording' ? 'true' : 'false'
     if (step.phase === 'ready' || step.phase === 'recording') {
-      app.innerHTML = shell(`
-        ${live}
+      liveOn(true)
+      const root = paint(`
         <div class="copy copy-top">
           <p class="prompt">${esc(LAST_ASK)}</p>
           <p class="hint">${esc(askB().ask)}</p>
         </div>
         <div class="chrome">
           <button class="icon-btn" type="button" data-skip aria-label="Skip">${iconX()}</button>
-          ${shutterMarkup(pressed === 'true')}
+          ${shutterMarkup(false)}
           <span class="chrome-slot"></span>
-        </div>`)
-      bindLive(app.querySelector('video.live')!)
-      app.querySelector<HTMLButtonElement>('[data-skip]')!.onclick = () => leaveRecord({ type: 'skip' })
-      app.querySelector<HTMLButtonElement>('.shutter')!.onclick = () => {
+          ${leavePopMarkup()}
+        </div>`, recording)
+      bindLeavePop(root)
+      root.querySelector<HTMLButtonElement>('.shutter')!.onclick = () => {
         if (step.name !== 'coda' || step.phase !== 'ready') return
         dispatch({ type: 'tap' })
         startRecording()
       }
       return
     }
-    app.innerHTML = shell(`
+    liveOn(false)
+    const root = paint(`
       <video class="replay" playsinline loop muted></video>
       <div class="chrome">
         <button class="icon-btn" type="button" data-skip aria-label="Skip">${iconX()}</button>
         <button class="icon-btn" type="button" data-redo aria-label="Redo">${lucideIcon(RefreshCcw)}</button>
         <button class="ok" type="button">OK</button>
+        ${leavePopMarkup()}
       </div>`)
-    const replay = app.querySelector<HTMLVideoElement>('video.replay')!
+    const replay = root.querySelector<HTMLVideoElement>('video.replay')!
     if (takeUrl) {
       replay.src = takeUrl
       replay.muted = true
       void replay.play()
     }
-    sketchButton(app.querySelector<HTMLButtonElement>('.ok')!)
-    app.querySelector<HTMLButtonElement>('[data-redo]')!.onclick = () => {
+    sketchButton(root.querySelector<HTMLButtonElement>('.ok')!)
+    root.querySelector<HTMLButtonElement>('[data-redo]')!.onclick = () => {
       stopRecording()
       revokeTake()
       dispatch({ type: 'redo' })
     }
-    app.querySelector<HTMLButtonElement>('.ok')!.onclick = () => leaveRecord({ type: 'keep' })
-    app.querySelector<HTMLButtonElement>('[data-skip]')!.onclick = () => leaveRecord({ type: 'skip' })
+    root.querySelector<HTMLButtonElement>('.ok')!.onclick = () => leaveRecord({ type: 'keep' })
+    bindLeavePop(root)
     return
   }
 
   if (step.name === 'leave') {
-    app.innerHTML = shell(`
-      <video class="live" autoplay muted playsinline></video>
+    liveOn(true)
+    const root = paint(`
       <div class="tap-layer tap-next">
         <div class="copy copy-mid">
           <p class="prompt">That's it.</p>
         </div>
       </div>`)
-    bindLive(app.querySelector('video.live')!)
-    app.querySelector('.tap-next')!.addEventListener('click', () => {
-      resetSitting()
-      dispatch({ type: 'again' })
+    root.querySelector('.tap-next')!.addEventListener('click', () => {
+      dissolveThen(() => {
+        resetSitting()
+        dispatch({ type: 'again' })
+      })
     })
     return
   }
 
   if (step.name === 'thanks') {
-    app.innerHTML = shell(`
+    liveOn(false)
+    const root = paint(`
       <div class="tap-layer tap-next">
         <div class="copy copy-mid">
           <p class="prompt">${esc(THANKS)}</p>
         </div>
       </div>`)
-    app.querySelector('.tap-next')!.addEventListener('click', () => {
-      resetSitting()
-      dispatch({ type: 'again' })
+    root.querySelector('.tap-next')!.addEventListener('click', () => {
+      dissolveThen(() => {
+        resetSitting()
+        dispatch({ type: 'again' })
+      })
     })
   }
 }
